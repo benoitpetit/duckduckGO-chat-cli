@@ -1,6 +1,6 @@
-# DuckDuckGO CLI
+# DuckDuckGO-chat-CLI
 
-DuckDuckGO-chat-CLI v1.0.0 is a command-line interface for interacting with DuckDuckGo's AI chat service directly from their terminal.
+DuckDuckGO-chat-CLI is a command-line interface for interacting with DuckDuckGo's AI chat service directly from their terminal.
 
 ## Features
 
