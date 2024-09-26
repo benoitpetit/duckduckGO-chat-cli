@@ -1,6 +1,6 @@
 # DuckDuckGO CLI
 
-DuckDuckGO CLI is a command-line interface for interacting with **DuckDuckGo's AI chat service**. This project is a refactored and improved version of the original [duckduckgo-ai-chat](https://github.com/mumu-lhl/duckduckgo-ai-chat) project, **rewritten in Go 🩵** with enhanced streaming capabilities in a CLI.
+DuckDuckGO-chat-CLI v1.0.0 is a command-line interface for interacting with DuckDuckGo's AI chat service directly from their terminal.
 
 ## Features
 
@@ -37,7 +37,7 @@ Start-Process -FilePath .\duckduckgo-chat-cli_windows_amd64.exe -Wait -NoNewWind
 After downloading, make the file executable (for Unix-based systems):
 
 ```bash
-chmod +x ./duckchat-cli_*
+chmod +x ./duckduckgo-chat-cli_*
 ```
 
 ## Installation from Source
@@ -63,14 +63,14 @@ If you prefer to build from source:
 
 5. Build the project:
    ```
-   go build
+   go build -o duckduckgo-chat-cli main.go
    ```
 
 ## Usage
    
    If you built from source, run the executable in the project directory:
    ```
-   ./duckchat-cli
+   ./duckduckgo-chat-cli
    ```
 
 2. Accept the Terms of Service when prompted.
@@ -83,7 +83,7 @@ If you prefer to build from source:
 
 ## Acknowledgements
 
-This project is inspired by and based on [duckduckgo-ai-chat](https://github.com/mumu-lhl/duckduckgo-ai-chat) by mumu-lhl. The original concept has been refactored into Go, with improvements to the streaming functionality and overall code structure.
+This project is inspired by [duckduckgo-ai-chat](https://github.com/mumu-lhl/duckduckgo-ai-chat). The original concept has been refactored into Go, with improvements to the streaming functionality and overall code structure.
 
 ## License
 
