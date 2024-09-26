@@ -22,7 +22,7 @@ Alternatively, you can use the following commands to download the latest release
 
 # For Linux (64-bit)
 ```bash
-curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest | grep "browser_download_url.*linux_amd64" | cut -d '"' -f 4)
+curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest | grep -oP 'https.*linux_amd64' | head -1)
 ```
 # For macOS (64-bit)
 ```shell
