@@ -20,15 +20,18 @@ You can download the latest pre-built executable from the [Releases](https://git
 
 Alternatively, you can use the following commands to download the latest release:
 
-```bash
 # For Linux (64-bit)
+```bash
 curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest | grep "browser_download_url.*linux_amd64" | cut -d '"' -f 4)
-
+```
 # For macOS (64-bit)
+```shell
 curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest | grep "browser_download_url.*darwin_amd64" | cut -d '"' -f 4)
-
+```
 # For Windows (64-bit)
-curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest | grep "browser_download_url.*windows_amd64.exe" | cut -d '"' -f 4)
+```powershell
+Invoke-WebRequest -Uri ((Invoke-RestMethod -Uri "https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest").assets | Where-Object name -like "*windows_amd64.exe").browser_download_url -OutFile duckduckgo-chat-cli_windows_amd64.exe
+Start-Process -FilePath .\duckduckgo-chat-cli_windows_amd64.exe -Wait -NoNewWindow
 ```
 
 After downloading, make the file executable (for Unix-based systems):
