@@ -1,52 +1,52 @@
 # 🦆 DuckDuckGo AI Chat CLI
 
-**Un outil CLI puissant pour interagir avec l'IA de DuckDuckGo**  
-_Intégration de contexte avancée, multi-modèles et productivité augmentée_
+**A powerful CLI tool to interact with DuckDuckGo's AI**  
+_Advanced context integration, multi-models and enhanced productivity_
 
-## ✨ Fonctionnalités phares
+## ✨ Key Features
 
-| **Chat intelligent**    | **Gestion de contexte**   | **Intégrations**   |
-| ----------------------- | ------------------------- | ------------------ |
-| ▶️ Streaming temps réel | 🔍 Recherche web intégrée | 📂 Fichiers locaux |
-| 🤖 4 modèles IA         | 🌐 Extraction web         | 📦 Export Markdown |
-| 🔄 Régénération         | 🧹 Nettoyage intelligent  | 🕸️ Rendering JS    |
-| 🎨 Sortie colorée       | ⏳ Historique             | 🔐 Gestion tokens  |
+| **Smart Chat**        | **Context Management**  | **Integrations**   |
+| -------------------- | --------------------- | ----------------- |
+| ▶️ Real-time streaming | 🔍 Integrated web search | 📂 Local files     |
+| 🤖 4 AI models        | 🌐 Web extraction       | 📦 Markdown export |
+| 🔄 Regeneration       | 🧹 Smart cleanup        | 🕸️ JS rendering    |
+| 🎨 Colored output     | ⏳ History              | 🔐 Token management|
 
-## 🧠 Modèles supportés
+## 🧠 Supported Models
 
-### `GPT-4o mini` (_Recommandé_)
+### `GPT-4o mini` (_Recommended_)
 
-- **Optimisé pour** : Réponses rapides, généralistes
-- **Cas d'usage** : Discussions courantes, brainstorming
-- **Limite contexte** : 4K tokens
+- **Optimized for**: Quick, general-purpose responses
+- **Use cases**: Common discussions, brainstorming
+- **Context limit**: 4K tokens
 
 ### `Claude 3 Haiku`
 
-- **Spécialité** : Analyse de données structurées
-- **Force** : Compréhension contextuelle profonde
-- **Bonus** : Supporte les prompts complexes
+- **Specialty**: Structured data analysis
+- **Strength**: Deep contextual understanding
+- **Bonus**: Supports complex prompts
 
 ### `Llama 3.1 70B`
 
-- **Pour qui** : Développeurs/Data Scientists
-- **Atout** : Génération de code/analyse technique
-- **Configuration** : 8GB RAM minimum
+- **For**: Developers/Data Scientists
+- **Asset**: Code generation/technical analysis
+- **Configuration**: 8GB RAM minimum
 
 ### `Mixtral 8x7B`
 
-- **Expertise** : Sujets spécialisés (médecine, droit)
-- **Avantage** : Synthèse multi-sources
-- **Performance** : Latence légèrement plus élevée
+- **Expertise**: Specialized topics (medicine, law)
+- **Advantage**: Multi-source synthesis
+- **Performance**: Slightly higher latency
 
 ## 🛠️ Installation
 
-### Prérequis
+### Prerequisites
 
 - Go 1.21+ (`go version`)
 - Chrome/Chromium 115+ (`chromium-browser --version`)
-- 500MB d'espace disque
+- 500MB disk space
 
-### Méthodes d'installation
+### Installation Methods
 
 ```bash
 # Linux
@@ -57,7 +57,7 @@ chmod +x duckduckgo-chat-cli_linux_amd64
 brew tap benoitpetit/cli && brew install duckduckgo-chat-cli
 ```
 
-**2. Compilation depuis les sources :**
+**2. Build from source:**
 
 ```bash
 git clone https://github.com/benoitpetit/duckduckGO-chat-cli
@@ -65,99 +65,100 @@ cd duckduckGO-chat-cli
 go build -ldflags "-s -w" -o ddg-chat
 ```
 
-## 🚀 Utilisation avancée
+## 🚀 Advanced Usage
 
-### Workflow typique
+### Typical Workflow
 
 ```bash
 ./ddg-chat
 > Accept terms? [yes/no] yes
-> Choisir modèle (1-4): 2
+> Choose model (1-4): 2
 
-[Claude 3 Haiku activé]
-/user : /search meilleures pratiques Rust 2025
-[+] 10 résultats ajoutés
+[Claude 3 Haiku activated]
+/user : /search Rust best practices 2025
+[+] 10 results added
 /user : /file ~/project/src/lib.rs
-[+] Fichier analysé (1.2KB)
-/user : Comment améliorer cette implémentation ?
-AI : █ Génération en cours...
+[+] File analyzed (1.2KB)
+/user : How can I improve this implementation?
+AI : █ Generating...
 ```
 
-### Commandes essentielles
+### Essential Commands
 
-| Commande          | Exemple                          | Résultat              |
-| ----------------- | -------------------------------- | --------------------- |
-| `/search <query>` | `/search GPT-5 spéculations`     | Injecte 10 résultats  |
-| `/file <chemin>`  | `/file /tmp/notes.md`            | Ajoute le contenu     |
-| `/url <lien>`     | `/url https://arxiv.org/abs/123` | Extrait le contenu    |
-| `/clear`          | `/clear`                         | Réinitialise contexte |
-| `/markdown`       | `/markdown`                      | Génère export MD      |
-| `/extract`        | `/extract`                       | Crée synthèse         |
+| Command           | Example                          | Result                |
+| ---------------- | -------------------------------- | --------------------- |
+| `/search <query>`| `/search GPT-5 speculations`     | Injects 10 results   |
+| `/file <path>`   | `/file /tmp/notes.md`           | Adds content |
+| `/url <link>`    | `/url https://arxiv.org/abs/123`| Extracts content |
+| `/clear`         | `/clear`                         | Resets context  |
+| `/markdown`      | `/markdown`                      | Generates MD export  |
+| `/extract`       | `/extract`                       | extract latest AI message |
 
-## 🔧 Configuration avancée
+## 🔧 Advanced Configuration
 
-### Variables d'environnement
+### Environment Variables
 
 ```bash
-export DDG_TIMEOUT=60        # Timeout des requêtes (secondes)
-export CHROMEDP_PATH=/usr/bin/chromium  # Chemin personnalisé Chrome
-export MAX_CONTEXT=5000      # Limite de tokens contextuels
+export DDG_TIMEOUT=60        # Request timeout (seconds)
+export CHROMEDP_PATH=/usr/bin/chromium  # Custom Chrome path
+export MAX_CONTEXT=5000      # Contextual token limit
 ```
 
-### Format d'export Markdown
+### Markdown Export Format
 
 ````markdown
-# Conversation du 15/03/2024
+# Conversation from 03/15/2024
 
-## Contexte recherche (15/03 14:30)
+## Search context (03/15 14:30)
 
 ```rust
 ▸ Rust Security Audit Guide
-  "Best practices for unsafe code..."
-  https://rustsec.org
+    "Best practices for unsafe code..."
+    https://rustsec.org
 ```
 
-## Message utilisateur (15/03 14:32)
+## User message (03/15 14:32)
 
-Comment sécuriser ce bloc unsafe ?
+How to secure this unsafe block?
 
-## Réponse AI (15/03 14:33)
+## AI Response (03/15 14:33)
 
-1. Utiliser `SafeWrapper` pour les pointeurs bruts...
+1. Use `SafeWrapper` for raw pointers...
 
 ````
 
-## 🚨 Dépannage
+## 🚨 Troubleshooting
 
-**Problème** : Échec d'extraction web
-**Solution** :
+**Issue**: Web extraction failure
+**Solution**:
 ```bash
-# Vérifier la version de Chrome
-chromium-browser --version  # Doit afficher ≥ 115.0.5790.110
+# Check Chrome version
+chromium-browser --version  # Should show ≥ 115.0.5790.110
 
-# Lancer en mode debug
+# Run in debug mode
 DDG_DEBUG=1 ./ddg-chat
-````
-
-**Problème** : Token VQD expiré  
-**Solution** :
-
-```bash
-/user : /clear  # Régénère automatiquement le token
 ```
 
-**Problème** : Latence élevée  
-**Solution** :
+**Issue**: VQD Token expired  
+**Solution**:
 
-- Changer de modèle (`/clear` puis choisir GPT-4o mini)
-- Réduire la taille du contexte (`export MAX_CONTEXT=3000`)
+```bash
+/user : /clear  # Automatically regenerates token
+```
 
-## 📜 Licence & Éthique
+**Issue**: High latency  
+**Solution**:
 
-- **Licence** : MIT License
-- **Collecte de données** : Aucune donnée personnelle stockée
-- **Attention** : Les sorties IA peuvent contenir des erreurs - toujours vérifier les faits critiques
+- Switch model (`/clear` then choose GPT-4o mini)
+- Reduce context size (`export MAX_CONTEXT=3000`)
 
-_Ce projet n'est pas affilié à DuckDuckGo - utilisez à vos risques_
+## 📜 License & Ethics
 
-> Made with ♥ par Benoit Petit - [Contribution guide](CONTRIBUTING.md)
+- **License**: MIT License
+- **Data collection**: No personal data stored
+- **Caution**: AI outputs may contain errors - always verify critical facts
+
+_This project is not affiliated with DuckDuckGo - use at your own risk_
+
+> Made with ♥ by Benoit Petit - [Contribution guide](CONTRIBUTING.md)
+
