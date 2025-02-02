@@ -126,6 +126,7 @@ How to secure this unsafe block?
 ```bash
 # Check Chrome version
 chromium-browser --version  # Should show ≥ 115.0.5790.110
+apt install chromium OR apt install chromium-browser
 ```
 
 **Issue**: VQD Token expired  
