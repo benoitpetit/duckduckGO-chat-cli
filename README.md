@@ -9,8 +9,8 @@ _Advanced context integration, multi-models and enhanced productivity_
 | -------------------- | --------------------- | ----------------- |
 | ▶️ Real-time streaming | 🔍 Integrated web search | 📂 Local files     |
 | 🤖 4 AI models        | 🌐 Web extraction       | 📦 Markdown export |
-| 🔄 Regeneration       | 🧹 Smart cleanup        | 🕸️ JS rendering    |
-| 🎨 Colored output     | ⏳ History              | 🔐 Token management|
+| 🔄 Regeneration (in progress..)     | 🧹 Smart cleanup        | 🕸️ JS rendering    |
+| 🎨 Colored output     | ⏳ History              | 🔐 Models switch |
 
 ## 🧠 Supported Models
 
