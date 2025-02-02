@@ -18,7 +18,6 @@ _Advanced context integration, multi-models and enhanced productivity_
 
 - **Optimized for**: Quick, general-purpose responses
 - **Use cases**: Common discussions, brainstorming
-- **Context limit**: 4K tokens
 
 ### `Claude 3 Haiku`
 
@@ -30,7 +29,6 @@ _Advanced context integration, multi-models and enhanced productivity_
 
 - **For**: Developers/Data Scientists
 - **Asset**: Code generation/technical analysis
-- **Configuration**: 8GB RAM minimum
 
 ### `Mixtral 8x7B`
 
