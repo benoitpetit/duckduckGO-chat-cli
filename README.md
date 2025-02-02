@@ -9,8 +9,8 @@ _Advanced context integration, multi-models and enhanced productivity_
 | -------------------- | --------------------- | ----------------- |
 | ▶️ Real-time streaming | 🔍 Integrated web search | 📂 Local files     |
 | 🤖 4 AI models        | 🌐 Web extraction       | 📦 Markdown export |
-| 🔄 Regeneration (in progress..)     | 🧹 Smart cleanup        | 🕸️ JS rendering    |
-| 🎨 Colored output     | ⏳ History              | 🔐 Models switch |
+| 🔄 Regeneration (in progress..)     | 🧹 Smart cleanup        | 🙊 Show Context    |
+| 🎨 Colored output     | ⏳ History              | 🤖 Models switch |
 
 ## 🧠 Supported Models
 
@@ -40,24 +40,25 @@ _Advanced context integration, multi-models and enhanced productivity_
 
 ## 🛠️ Installation
 
-### Prerequisites
+## Platform-Specific Downloads
 
+**Linux (64-bit)**
+```bash
+curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest | grep -oP 'https.*linux_amd64' | head -1)
+```
+
+**Windows (64-bit)**
+```powershell
+Invoke-WebRequest -Uri ((Invoke-RestMethod -Uri "https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest").assets | Where-Object name -like "*windows_amd64.exe").browser_download_url -OutFile duckduckgo-chat-cli_windows_amd64.exe
+```
+
+**2. Build from source:**
+
+Prerequisites:
 - Go 1.21+ (`go version`)
 - Chrome/Chromium 115+ (`chromium-browser --version`)
 - 500MB disk space
 
-### Installation Methods
-
-```bash
-# Linux
-curl -LO https://github.com/benoitpetit/duckduckGO-chat-cli/releases/latest/download/duckduckgo-chat-cli_linux_amd64
-chmod +x duckduckgo-chat-cli_linux_amd64
-
-# macOS
-brew tap benoitpetit/cli && brew install duckduckgo-chat-cli
-```
-
-**2. Build from source:**
 
 ```bash
 git clone https://github.com/benoitpetit/duckduckGO-chat-cli
@@ -125,16 +126,13 @@ How to secure this unsafe block?
 ```bash
 # Check Chrome version
 chromium-browser --version  # Should show ≥ 115.0.5790.110
-
-# Run in debug mode
-DDG_DEBUG=1 ./ddg-chat
 ```
 
 **Issue**: VQD Token expired  
 **Solution**:
 
 ```bash
-/user : /clear  # Automatically regenerates token
+user : /clear  # Automatically regenerates token
 ```
 
 **Issue**: High latency  
@@ -145,11 +143,10 @@ DDG_DEBUG=1 ./ddg-chat
 
 ## 📜 License & Ethics
 
-- **License**: MIT License
 - **Data collection**: No personal data stored
 - **Caution**: AI outputs may contain errors - always verify critical facts
 
 _This project is not affiliated with DuckDuckGo - use at your own risk_
 
-> Made with ♥ by Benoit Petit - [Contribution guide](CONTRIBUTING.md)
+> Made with ♥ by Benoit Petit
 
