@@ -94,15 +94,6 @@ AI : █ Generating...
 | `/markdown`      | `/markdown`                      | Generates MD export  |
 | `/extract`       | `/extract`                       | extract latest AI message |
 
-## 🔧 Advanced Configuration
-
-### Environment Variables
-
-```bash
-export DDG_TIMEOUT=60        # Request timeout (seconds)
-export CHROMEDP_PATH=/usr/bin/chromium  # Custom Chrome path
-export MAX_CONTEXT=5000      # Contextual token limit
-```
 
 ### Markdown Export Format
 
@@ -149,8 +140,8 @@ DDG_DEBUG=1 ./ddg-chat
 **Issue**: High latency  
 **Solution**:
 
-- Switch model (`/clear` then choose GPT-4o mini)
-- Reduce context size (`export MAX_CONTEXT=3000`)
+- Switch model (`/model` then choose GPT-4o mini)
+- Reduce context size (`export MAX_CONTEXT=3000`) use (`/clear` for clean context)
 
 ## 📜 License & Ethics
 
