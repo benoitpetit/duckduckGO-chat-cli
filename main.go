@@ -700,7 +700,7 @@ func chooseModel() ModelAlias {
 	color.Yellow("Please choose an AI model:")
 	color.White("1. GPT-4o mini")
 	color.White("2. Claude 3 Haiku")
-	color.White("3. Llama 3.1 70B")
+	color.White("3. Llama 3.3 70B")
 	color.White("4. Mixtral 8x7B")
 
 	reader := bufio.NewReader(os.Stdin)
