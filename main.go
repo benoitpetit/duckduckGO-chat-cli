@@ -40,7 +40,7 @@ type ModelAlias string
 const (
 	GPT4Mini Model = "gpt-4o-mini"
 	Claude3  Model = "claude-3-haiku-20240307"
-	Llama    Model = "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo"
+	Llama    Model = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
 	Mixtral  Model = "mistralai/Mixtral-8x7B-Instruct-v0.1"
 
 	GPT4MiniAlias ModelAlias = "gpt-4o-mini"
