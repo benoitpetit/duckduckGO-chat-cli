@@ -40,13 +40,15 @@ type ModelAlias string
 const (
 	GPT4Mini Model = "gpt-4o-mini"
 	Claude3  Model = "claude-3-haiku-20240307"
-	Llama    Model = "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo"
+	Llama    Model = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
 	Mixtral  Model = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+	o3mini   Model = "o3-mini"
 
 	GPT4MiniAlias ModelAlias = "gpt-4o-mini"
 	Claude3Alias  ModelAlias = "claude-3-haiku"
 	LlamaAlias    ModelAlias = "llama"
 	MixtralAlias  ModelAlias = "mixtral"
+	o3miniAlias   ModelAlias = "o3mini"
 )
 
 // Map model aliases to their corresponding Model values
@@ -55,6 +57,7 @@ var modelMap = map[ModelAlias]Model{
 	Claude3Alias:  Claude3,
 	LlamaAlias:    Llama,
 	MixtralAlias:  Mixtral,
+	o3miniAlias:   o3mini,
 }
 
 // Message represents a chat message
@@ -700,12 +703,13 @@ func chooseModel() ModelAlias {
 	color.Yellow("Please choose an AI model:")
 	color.White("1. GPT-4o mini")
 	color.White("2. Claude 3 Haiku")
-	color.White("3. Llama 3.1 70B")
+	color.White("3. Llama 3.3 70B")
 	color.White("4. Mixtral 8x7B")
+	color.White("5. o3-mini")
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		color.Blue("Enter your choice (1-4): ")
+		color.Blue("Enter your choice (1-5): ")
 		choice, _ := reader.ReadString('\n')
 		choice = strings.TrimSpace(choice)
 
@@ -718,6 +722,8 @@ func chooseModel() ModelAlias {
 			return LlamaAlias
 		case "4":
 			return MixtralAlias
+		case "5":
+			return o3miniAlias
 		default:
 			color.Red("Invalid choice. Please try again.")
 		}
