@@ -48,7 +48,7 @@ Prerequisites:
 
 ```bash
 git clone https://github.com/benoitpetit/duckduckGO-chat-cli
-cd duckduckGO-chat-cli
+cd duckduckGO-chat-cli/cmd/duckchat
 go build -ldflags "-s -w" -o ddg-chat
 ```
 
