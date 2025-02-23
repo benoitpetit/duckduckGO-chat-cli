@@ -23,7 +23,7 @@ func main() {
 	color.Cyan("Welcome to DuckDuckGo AI Chat CLI!")
 
 	cfg := config.Initialize()
-	models.CheckChromeVersion()
+	//models.CheckChromeVersion()
 
 	if !config.AcceptTermsOfService(cfg) {
 		color.Yellow("You must accept the terms to use this app. Exiting.")
