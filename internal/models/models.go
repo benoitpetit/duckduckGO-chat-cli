@@ -57,22 +57,35 @@ func GetModel(alias string) Model {
 func CheckChromeVersion() {
 	version, err := getChromeVersion()
 	if err != nil {
-		panic(fmt.Sprintf("Chrome version check failed: %v", err))
+		color.Yellow("Warning: %v", err)
+		color.Yellow("Continuing without Chrome version check...")
+		return // Continue instead of panic
 	}
 
 	result, err := compareVersions(version, MinChromeVersion)
 	if err != nil {
-		panic(fmt.Sprintf("Version comparison failed: %v", err))
+		color.Yellow("Warning: Chrome version check failed: %v", err)
+		color.Yellow("Continuing without version verification...")
+		return // Continue instead of panic
 	}
 
 	if result < 0 {
-		panic(fmt.Sprintf("Chrome %s+ required, found %s", MinChromeVersion, version))
+		color.Yellow("Warning: Chrome %s+ recommended, found %s", MinChromeVersion, version)
+		color.Yellow("The application might still work, but it's recommended to upgrade Chrome")
 	}
 }
 
 func compareVersions(v1, v2 string) (int, error) {
-	// Clean version string
-	v1 = strings.TrimPrefix(strings.TrimSpace(v1), "Google Chrome ")
+	// Clean version strings
+	v1 = strings.TrimSpace(v1)
+	v1 = strings.TrimPrefix(v1, "Google Chrome ")
+	v1 = strings.TrimPrefix(v1, "Chromium ")
+
+	// Remove "snap" suffix if present
+	if idx := strings.Index(v1, " snap"); idx != -1 {
+		v1 = v1[:idx]
+	}
+
 	v1parts := strings.Split(v1, ".")
 	v2parts := strings.Split(v2, ".")
 
@@ -80,12 +93,13 @@ func compareVersions(v1, v2 string) (int, error) {
 		return 0, fmt.Errorf("invalid version format")
 	}
 
-	v1num, err := strconv.Atoi(v1parts[0])
+	// Compare major version numbers
+	v1num, err := strconv.Atoi(strings.TrimSpace(v1parts[0]))
 	if err != nil {
 		return 0, fmt.Errorf("invalid version: %s", v1)
 	}
 
-	v2num, err := strconv.Atoi(v2parts[0])
+	v2num, err := strconv.Atoi(strings.TrimSpace(v2parts[0]))
 	if err != nil {
 		return 0, fmt.Errorf("invalid version: %s", v2)
 	}
@@ -101,48 +115,79 @@ func compareVersions(v1, v2 string) (int, error) {
 func getChromeVersion() (string, error) {
 	switch runtime.GOOS {
 	case "windows":
-		cmd := exec.Command("reg", "query", chromeRegistryPath, "/v", "version")
-		output, err := cmd.Output()
-		if err != nil {
-			return "", fmt.Errorf("chrome not found: %v", err)
+		paths := []string{
+			"reg query \"HKEY_CURRENT_USER\\Software\\Google\\Chrome\\BLBeacon\" /v version",
+			"reg query \"HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Google Chrome\" /v Version",
 		}
 
-		// Parse Windows registry output
-		lines := strings.Split(string(output), "\n")
-		for _, line := range lines {
-			if strings.Contains(line, "REG_SZ") {
-				fields := strings.Fields(line)
-				if len(fields) >= 3 {
-					version := fields[len(fields)-1]
+		for _, cmd := range paths {
+			if output, err := exec.Command("cmd", "/C", cmd).Output(); err == nil {
+				if version := extractWindowsVersion(string(output)); version != "" {
 					return version, nil
 				}
 			}
 		}
-		return "", fmt.Errorf("version not found in registry")
+		return "", fmt.Errorf("chrome not found in Windows registry")
 
 	case "linux":
-		cmd := exec.Command("chromium-browser", "--version")
-		output, err := cmd.Output()
-		if err != nil {
-			cmd = exec.Command("google-chrome", "--version")
-			output, err = cmd.Output()
-			if err != nil {
-				return "", fmt.Errorf("Chrome/Chromium not found: %v", err)
+		browsers := []string{
+			"google-chrome",
+			"google-chrome-stable",
+			"chromium",
+			"chromium-browser",
+		}
+
+		for _, browser := range browsers {
+			if output, err := exec.Command(browser, "--version").Output(); err == nil {
+				return strings.TrimSpace(string(output)), nil
 			}
 		}
-		return strings.TrimSpace(string(output)), nil
+
+		// Vérifier les chemins communs
+		paths := []string{
+			"/usr/bin/google-chrome",
+			"/usr/bin/chromium",
+			"/snap/bin/chromium",
+		}
+
+		for _, path := range paths {
+			if _, err := os.Stat(path); err == nil {
+				if output, err := exec.Command(path, "--version").Output(); err == nil {
+					return strings.TrimSpace(string(output)), nil
+				}
+			}
+		}
+
+		return "", fmt.Errorf("neither Chrome nor Chromium found on system")
 
 	case "darwin":
-		cmd := exec.Command("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "--version")
-		output, err := cmd.Output()
-		if err != nil {
-			return "", fmt.Errorf("chrome not found: %v", err)
+		paths := []string{
+			"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+			"/Applications/Chromium.app/Contents/MacOS/Chromium",
 		}
-		return strings.TrimSpace(string(output)), nil
+
+		for _, path := range paths {
+			if output, err := exec.Command(path, "--version").Output(); err == nil {
+				return strings.TrimSpace(string(output)), nil
+			}
+		}
+		return "", fmt.Errorf("chrome not found on macOS")
 
 	default:
-		return "", fmt.Errorf("unsupported operating system")
+		return "", fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
+}
+
+func extractWindowsVersion(output string) string {
+	for _, line := range strings.Split(output, "\n") {
+		if strings.Contains(line, "REG_SZ") {
+			fields := strings.Fields(line)
+			if len(fields) >= 3 {
+				return fields[len(fields)-1]
+			}
+		}
+	}
+	return ""
 }
 
 func HandleModelChange(chat interface{}, modelArg string) ModelAlias {

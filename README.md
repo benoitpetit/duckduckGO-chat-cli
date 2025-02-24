@@ -28,15 +28,12 @@ _Advanced context integration, multi-models and enhanced productivity_
 
 **Windows (PowerShell)**
 ```powershell
-Invoke-WebRequest -Uri ((Invoke-RestMethod -Uri "https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest").assets | Where-Object name -like "*windows_amd64.exe").browser_download_url -OutFile duckduckgo-chat-cli_windows_amd64.exe
-./duckduckgo-chat-cli_windows_amd64.exe
+Invoke-WebRequest -Uri ((Invoke-RestMethod -Uri "https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest").assets | Where-Object name -like "*windows_amd64.exe").browser_download_url -OutFile duckduckgo-chat-cli_windows_amd64.exe | ./duckduckgo-chat-cli_windows_amd64.exe
 ```
 
 **Linux (curl)**
 ```bash
-curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest | grep -oP 'https.*linux_amd64' | head -1)
-chmod +x duckduckgo-chat-cli_linux_amd64
-./duckduckgo-chat-cli_linux_amd64
+curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest | grep -oP 'https.*linux_amd64' | head -1) && chmod +x duckduckgo-chat-cli_linux_amd64 && ./duckduckgo-chat-cli_linux_amd64
 ```
 
 ### 2. Build from source
@@ -44,12 +41,11 @@ chmod +x duckduckgo-chat-cli_linux_amd64
 Prerequisites:
 - Go 1.21+ (`go version`)
 - Chrome/Chromium 115+ (`chromium-browser --version`)
-- 500MB disk space
 
-```bash
+```sh
 git clone https://github.com/benoitpetit/duckduckGO-chat-cli
-cd duckduckGO-chat-cli/cmd/duckchat
-go build -ldflags "-s -w" -o ddg-chat
+cd duckduckGO-chat-cli
+./scripts/build.sh
 ```
 
 ## 🚀 Usage

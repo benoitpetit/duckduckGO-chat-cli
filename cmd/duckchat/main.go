@@ -16,14 +16,14 @@ import (
 )
 
 func main() {
-	// Créer un canal pour gérer l'interruption
+	// create a channel to listen for interrupts
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	color.Cyan("Welcome to DuckDuckGo AI Chat CLI!")
 
 	cfg := config.Initialize()
-	//models.CheckChromeVersion()
+	models.CheckChromeVersion()
 
 	if !config.AcceptTermsOfService(cfg) {
 		color.Yellow("You must accept the terms to use this app. Exiting.")
@@ -32,7 +32,7 @@ func main() {
 
 	chatSession := chat.InitializeSession(cfg)
 
-	// Déplacer le message de sortie dans une fonction cleanup
+	// move the cleanup function to a defer statement
 	cleanup := func() {
 		color.Yellow("\nExiting chat. Goodbye!")
 	}
@@ -44,7 +44,7 @@ func main() {
 		chat.PrintCommands()
 	}
 
-	// Créer un canal pour la lecture des entrées et un canal pour arrêter la goroutine
+	// create a channel to listen for user input
 	inputChan := make(chan string)
 	stopChan := make(chan struct{})
 	go readInput(inputChan, stopChan)
@@ -52,9 +52,9 @@ func main() {
 	for {
 		select {
 		case <-sigChan:
-			// Arrêter proprement la goroutine de lecture
+			// stop the input goroutine 
 			close(stopChan)
-			fmt.Println() // Nouvelle ligne pour la propreté
+			fmt.Println() // clear the line
 			return
 		case input := <-inputChan:
 			if input == "/exit" {
@@ -70,10 +70,10 @@ func main() {
 func readInput(inputChan chan string, stopChan chan struct{}) {
 	reader := bufio.NewReader(os.Stdin)
 
-	// Afficher le prompt
+	// show the user prompt
 	fmt.Print("\033[34mYou: \033[0m") // Blue color without newline
 
-	// Lire l'entrée avec gestion de l'interruption
+	// read the user input
 	input, err := reader.ReadString('\n')
 	select {
 	case <-stopChan:
@@ -87,7 +87,7 @@ func readInput(inputChan chan string, stopChan chan struct{}) {
 }
 
 func handleCommand(chatSession *chat.Chat, cfg *config.Config, input string) {
-	// Si l'entrée est vide, on ignore simplement
+	// if the input is empty, return
 	if input == "" {
 		return
 	}
