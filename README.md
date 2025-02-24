@@ -33,7 +33,7 @@ Invoke-WebRequest -Uri ((Invoke-RestMethod -Uri "https://api.github.com/repos/be
 
 **Linux (curl)**
 ```bash
-curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest | grep -oP 'https.*linux_amd64' | head -1) && chmod +x duckduckgo-chat-cli_linux_amd64 && ./duckduckgo-chat-cli_linux_amd64
+curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest | grep -oP 'https.*v[0-9]+\.[0-9]+\.[0-9]+_linux_amd64' | head -1) && chmod +x duckduckgo-chat-cli_v*_linux_amd64 && ./duckduckgo-chat-cli_v*_linux_amd64
 ```
 
 ### 2. Build from source
