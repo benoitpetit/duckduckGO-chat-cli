@@ -147,16 +147,16 @@ func ProcessInput(c *Chat, input string) {
 }
 
 func shortenModelName(model string) string {
-	displayNames := map[string]string{
-		"gpt-4o-mini":                             "GPT-4 Mini",
-		"claude-3-haiku-20240307":                 "Claude 3",
-		"meta-llama/Llama-3.3-70B-Instruct-Turbo": "Llama 3",
-		"mistralai/Mixtral-8x7B-Instruct-v0.1":    "Mixtral",
-		"o3-mini":                                 "O3 Mini",
+	displayNames := map[string]models.ModelAlias{
+		"gpt-4o-mini":                               "gpt-4o-mini",
+		"claude-3-haiku-20240307":                   "claude-3-haiku",
+		"meta-llama/Llama-3.3-70B-Instruct-Turbo":   "llama",
+		"mistralai/Mistral-Small-24B-Instruct-2501": "mixtral",
+		"o3-mini": "o3mini",
 	}
 
 	if shortName, exists := displayNames[model]; exists {
-		return shortName
+		return string(shortName)
 	}
 	return model
 }

@@ -29,7 +29,7 @@ const (
 	GPT4Mini Model = "gpt-4o-mini"
 	Claude3  Model = "claude-3-haiku-20240307"
 	Llama    Model = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
-	Mixtral  Model = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+	Mixtral  Model = "mistralai/Mistral-Small-24B-Instruct-2501"
 	o3mini   Model = "o3-mini"
 
 	GPT4MiniAlias ModelAlias = "gpt-4o-mini"
@@ -208,7 +208,7 @@ func HandleModelChange(chat interface{}, modelArg string) ModelAlias {
 	color.White("1) GPT-4o-mini")
 	color.White("2) Claude-3-haiku")
 	color.White("3) Llama 3.3")
-	color.White("4) Mixtral 8x7B")
+	color.White("4) Mistral Small 3")
 	color.White("5) o3-mini")
 	color.White("6) Cancel")
 

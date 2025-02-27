@@ -11,9 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
 	"duckduckgo-chat-cli/internal/interfaces"
 	"duckduckgo-chat-cli/internal/models"
+
+	"github.com/fatih/color"
 )
 
 type SearchConfig struct {
@@ -168,7 +169,7 @@ func handleModelChange(cfg *Config, chatSession interfaces.ChatSession) {
 	color.White("1. GPT-4o mini")
 	color.White("2. Claude 3 Haiku")
 	color.White("3. Llama 3.3 70B")
-	color.White("4. Mixtral 8x7B")
+	color.White("4. Mistral Small 3")
 	color.White("5. o3-mini")
 
 	reader := bufio.NewReader(os.Stdin)
