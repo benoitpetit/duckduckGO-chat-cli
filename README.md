@@ -14,13 +14,13 @@ _Advanced context integration, multi-models and enhanced productivity_
 
 ## 🧠 Available Models
 
-| Model | Performance | Best For | Features |
-|-------|------------|----------|-----------|
-| **GPT-4o mini** | Fast | Quick answers & basic tasks | • Default model<br>• General-purpose |
-| **Claude 3 Haiku** | Balanced | Technical discussions | • Good context handling<br>• Structured responses |
-| **Llama 3.3** | Code-optimized | Programming tasks | • Documentation analysis<br>• Code generation |
-| **Mixtral 8x7B** | Knowledge-focused | Complex topics | • Detailed explanations<br>• Deep analysis |
-| **o3-mini** | Fastest | Simple queries | • Lightweight<br>• Quick responses |
+| Model | Alias | Performance | Best For | Features |
+|-------|-------|-------------|----------|----------|
+| **GPT-4o mini** | gpt-4o-mini | Fast | Quick answers & basic tasks | • Default model<br>• General-purpose |
+| **Claude 3 Haiku** | claude-3-haiku | Balanced | Technical discussions | • Good context handling<br>• Structured responses |
+| **Llama 3.3** | llama | Code-optimized | Programming tasks | • Documentation analysis<br>• Code generation |
+| **Mixtral 8x7B** | mixtral | Knowledge-focused | Complex topics | • Detailed explanations<br>• Deep analysis |
+| **o3-mini** | o3mini | Fastest | Simple queries | • Lightweight<br>• Quick responses |
 
 ## 🛠️ Installation
 
