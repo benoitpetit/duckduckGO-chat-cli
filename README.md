@@ -5,33 +5,35 @@ _Advanced context integration, multi-models and enhanced productivity_
 
 ## ✨ Key Features
 
-| Chat Features | Context Management | Tools & Export |
-|---------------|-------------------|----------------|
-| ▶️ Live streaming responses | 🔍 Web search integration | 📋 Clipboard support |
-| 🌈 Smart formatting | 📂 File content import | 💻 Code block extraction |
-| 🎨 Syntax highlighting | 🌐 URL content scraping | 📜 History viewer |
-| 🤖 5 AI models | 🧹 Context clearing | ⚙️ Configurable settings |
+| Chat Features               | Context Management        | Tools & Export           |
+| --------------------------- | ------------------------- | ------------------------ |
+| ▶️ Live streaming responses | 🔍 Web search integration | 📋 Clipboard support     |
+| 🌈 Smart formatting         | 📂 File content import    | 💻 Code block extraction |
+| 🎨 Syntax highlighting      | 🌐 URL content scraping   | 📜 History viewer        |
+| 🤖 5 AI models              | 🧹 Context clearing       | ⚙️ Configurable settings |
 
 ## 🧠 Available Models
 
-| Model | Alias | Performance | Best For | Features |
-|-------|-------|-------------|----------|----------|
-| **GPT-4o mini** | gpt-4o-mini | Fast | Quick answers & basic tasks | • Default model<br>• General-purpose |
-| **Claude 3 Haiku** | claude-3-haiku | Balanced | Technical discussions | • Good context handling<br>• Structured responses |
-| **Llama 3.3** | llama | Code-optimized | Programming tasks | • Documentation analysis<br>• Code generation |
-| **Mixtral 8x7B** | mixtral | Knowledge-focused | Complex topics | • Detailed explanations<br>• Deep analysis |
-| **o3-mini** | o3mini | Fastest | Simple queries | • Lightweight<br>• Quick responses |
+| Model Name        | Actual Model                              | Alias          | Performance              | Recommended Usage              | Characteristics                                    |
+| ---------------- | ----------------------------------------- | -------------- | ------------------------ | ----------------------------- | ------------------------------------------------- |
+| **GPT-4o mini**  | gpt-4o-mini                               | gpt-4o-mini    | Fast                     | Quick responses & simple tasks | • Default model<br>• Versatile                    |
+| **Claude 3 Haiku** | claude-3-haiku-20240307                   | claude-3-haiku | Balanced                 | Technical discussions         | • Good context handling<br>• Structured responses  |
+| **Llama 3.3 70B** | meta-llama/Llama-3.3-70B-Instruct-Turbo   | llama          | Code optimized           | Programming tasks             | • Documentation analysis<br>• Code generation      |
+| **Mistral Small 3** | mistralai/Mistral-Small-24B-Instruct-2501 | mixtral        | Knowledge focused        | Complex topics                | • Detailed explanations<br>• In-depth analysis    |
+| **o3-mini**      | o3-mini                                   | o3mini         | Very fast                | Simple queries                | • Lightweight<br>• Quick responses                |
 
 ## 🛠️ Installation
 
 ### 1. Direct Download & Run
 
 **Windows (PowerShell)**
+
 ```powershell
 $exe="duckduckgo-chat-cli_windows_amd64.exe"; Invoke-WebRequest -Uri ((Invoke-RestMethod "https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest").assets | Where-Object name -like "*windows_amd64.exe").browser_download_url -OutFile $exe; Start-Process -Wait -NoNewWindow -FilePath ".\$exe"
 ```
 
 **Linux (curl)**
+
 ```bash
 curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest | grep -oP 'https.*v[0-9]+\.[0-9]+\.[0-9]+_linux_amd64' | head -1) && chmod +x duckduckgo-chat-cli_v*_linux_amd64 && ./duckduckgo-chat-cli_v*_linux_amd64
 ```
@@ -39,6 +41,7 @@ curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/
 ### 2. Build from source
 
 Prerequisites:
+
 - Go 1.21+ (`go version`)
 - Chrome/Chromium 115+ (`chromium-browser --version`)
 
@@ -53,6 +56,7 @@ cd duckduckGO-chat-cli
 ### Typical Workflow
 
 Example 1: Code Analysis
+
 ```bash
 ./duckduckgo-chat-cli_linux_amd64
 Accept terms? [yes/no] yes
@@ -70,6 +74,7 @@ GPT-4 Mini: Analyzing your code...
 ```
 
 Example 2: Market Analysis
+
 ```bash
 You: /url https://coinmarketcap.com/currencies/xrp/
 [+] URL content processed
@@ -87,41 +92,45 @@ GPT-4 Mini: Analyzing market data and recent news for XRP...
 ```
 
 ### Essential Commands
-| Command | Example | Description |
-|---------|---------|-------------|
-| `/search <query>` | `/search Go tutorials` | Add search results to context |
-| `/file <path>` | `/file src/main.go` | Import file content |
-| `/url <link>` | `/url github.com/golang` | Add webpage content |
-| `/model` | `/model` or `/model 2` | Change AI model (interactive) |
-| `/clear` | `/clear` | Reset conversation |
-| `/export` | `/export` | Export content (interactive) |
-| `/copy` | `/copy` | Copy to clipboard (interactive) |
-| `/history` | `/history` | Show chat history |
-| `/config` | `/config` | Configure settings |
-| `/help` | `/help` | Show available commands |
-| `/exit` | `/exit` | Quit application |
+
+| Command           | Example                  | Description                     |
+| ----------------- | ------------------------ | ------------------------------- |
+| `/search <query>` | `/search Go tutorials`   | Add search results to context   |
+| `/file <path>`    | `/file src/main.go`      | Import file content             |
+| `/url <link>`     | `/url github.com/golang` | Add webpage content             |
+| `/model`          | `/model` or `/model 2`   | Change AI model (interactive)   |
+| `/clear`          | `/clear`                 | Reset conversation              |
+| `/export`         | `/export`                | Export content (interactive)    |
+| `/copy`           | `/copy`                  | Copy to clipboard (interactive) |
+| `/history`        | `/history`               | Show chat history               |
+| `/config`         | `/config`                | Configure settings              |
+| `/help`           | `/help`                  | Show available commands         |
+| `/exit`           | `/exit`                  | Quit application                |
 
 ## 🛠️ Configuration
 
 ### Main Settings
-| Option | Description | Default | Range |
-|--------|-------------|---------|--------|
-| `DefaultModel` | Starting AI model | gpt-4o-mini | 5 models available |
-| `ExportDir` | Export directory | ~/Documents/duckchat | Any valid path |
-| `ShowMenu` | Display commands menu | true | true/false |
-| `SearchSettings` | Access search configuration | N/A | See below |
+
+| Option           | Description                 | Default              | Range              |
+| ---------------- | --------------------------- | -------------------- | ------------------ |
+| `DefaultModel`   | Starting AI model           | gpt-4o-mini          | 5 models available |
+| `ExportDir`      | Export directory            | ~/Documents/duckchat | Any valid path     |
+| `ShowMenu`       | Display commands menu       | true                 | true/false         |
+| `SearchSettings` | Access search configuration | N/A                  | See below          |
 
 ### Search Settings
-| Option | Description | Default | Range |
-|--------|-------------|---------|--------|
-| `MaxResults` | Results per search | 10 | 1-10 |
-| `IncludeSnippet` | Show result descriptions | true | true/false |
-| `MaxRetries` | Connection retry attempts | 3 | 1-5 |
-| `RetryDelay` | Seconds between retries | 1 | 1-10 |
+
+| Option           | Description               | Default | Range      |
+| ---------------- | ------------------------- | ------- | ---------- |
+| `MaxResults`     | Results per search        | 10      | 1-10       |
+| `IncludeSnippet` | Show result descriptions  | true    | true/false |
+| `MaxRetries`     | Connection retry attempts | 3       | 1-5        |
+| `RetryDelay`     | Seconds between retries   | 1       | 1-10       |
 
 Use `/config` to modify these settings interactively through the CLI.
 
 ### Persistent Storage
+
 - Configuration paths:
   - Windows: `C:\Users\<username>\AppData\Roaming\duckduckgo-chat-cli\config.json`
   - Linux/macOS: `~/.config/duckduckgo-chat-cli/config.json`
@@ -132,12 +141,14 @@ Use `/config` to modify these settings interactively through the CLI.
 ## 🔄 Export Features
 
 ### Available Formats
+
 1. Full conversation (`/export` → 1)
 2. Last AI response (`/export` → 2)
 3. Code blocks (`/export` → 3)
 4. Search results (`/export` → 4)
 
 ### Copy Options
+
 - `/copy` → 1: Copy last Q&A exchange
 - `/copy` → 2: Copy largest code block
 
@@ -162,6 +173,7 @@ context_size: 5
 # DuckDuckGo AI Chat Export
 
 ## Search Context (14:30)
+
 ...
 ```
 
@@ -175,6 +187,7 @@ context_size: 5
 
 **Issue**: Web extraction failure
 **Solution**:
+
 ```bash
 # Check Chrome version
 chromium-browser --version  # Should show ≥ 115.0.5790.110
@@ -189,8 +202,9 @@ user : /clear  # Automatically regenerates token
 ```
 
 If the issue persists:
+
 - Wait a few minutes and try again
-- Change your IP address using a VPN. 
+- Change your IP address using a VPN.
 - It appears to work with [Cloudflare WARP](https://1.1.1.1/)
 
 ## 📜 License & Ethics
@@ -199,4 +213,5 @@ If the issue persists:
 - **Caution**: AI outputs may contain errors - always verify critical facts
 
 _This project is not affiliated with DuckDuckGo - use at your own risk_
+
 > Made with ♥ for the community
