@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,11 +24,14 @@ import (
 )
 
 type Chat struct {
-	OldVqd   string
-	NewVqd   string
-	Model    models.Model
-	Messages []Message
-	Client   *http.Client
+	OldVqd     string
+	NewVqd     string
+	Model      models.Model
+	Messages   []Message
+	Client     *http.Client
+	CookieJar  *cookiejar.Jar
+	LastHash   string
+	RetryCount int
 }
 
 type Message struct {
@@ -58,18 +62,25 @@ func setTerminalTitle(title string) {
 }
 
 func NewChat(vqd string, model models.Model) *Chat {
+	jar, _ := cookiejar.New(nil)
 	return &Chat{
-		OldVqd:   vqd,
-		NewVqd:   vqd,
-		Model:    model,
-		Messages: []Message{},
-		Client:   &http.Client{Timeout: 30 * time.Second},
+		OldVqd:     vqd,
+		NewVqd:     vqd,
+		Model:      model,
+		Messages:   []Message{},
+		CookieJar:  jar,
+		Client:     &http.Client{Timeout: 30 * time.Second, Jar: jar},
+		RetryCount: 0,
 	}
 }
 
 func GetVQD() string {
 	req, _ := http.NewRequest("GET", models.StatusURL, nil)
-	req.Header.Set("x-vqd-accept", models.StatusHeaders)
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Accept-Language", "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("x-vqd-accept", "1")
+	req.Header.Set("Referer", "https://duckduckgo.com/")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		color.Red("Error fetching VQD: %v", err)
@@ -79,11 +90,13 @@ func GetVQD() string {
 	return resp.Header.Get("x-vqd-4")
 }
 
-// Modify the Clear function to take configuration into account
+func (c *Chat) generateClientHash() string {
+	return ""
+}
+
 func (c *Chat) Clear(cfg *config.Config) {
 	clearTerminal()
 
-	// Only reset VQD if we have a history
 	if len(c.Messages) > 0 {
 		c.Messages = []Message{}
 		c.NewVqd = GetVQD()
@@ -93,7 +106,6 @@ func (c *Chat) Clear(cfg *config.Config) {
 		color.Yellow("Chat is already empty")
 	}
 
-	// Strictly respect ShowMenu configuration
 	if cfg.ShowMenu {
 		PrintWelcomeMessage()
 	} else {
@@ -129,16 +141,15 @@ func ProcessInput(c *Chat, input string) {
 		return
 	}
 
-	// Use ANSI format directly to avoid automatic line break
 	modelName := shortenModelName(string(c.Model))
-	fmt.Print("\033[32m" + modelName + ":\033[0m ") // Green color without newline
+	fmt.Print("\033[32m" + modelName + ":\033[0m ")
 
 	var responseBuffer strings.Builder
 	for chunk := range stream {
 		fmt.Print(chunk)
 		responseBuffer.WriteString(chunk)
 	}
-	fmt.Print("\n") // Single line break after response
+	fmt.Print("\n")
 
 	c.Messages = append(c.Messages, Message{
 		Role:    "assistant",
@@ -201,18 +212,18 @@ func (c *Chat) FetchStream(content string) (<-chan string, error) {
 			log.Printf("Error reading response body: %v\n", err)
 		}
 
-		// Update VQD only if we receive a new one
 		if newVqd := resp.Header.Get("x-vqd-4"); newVqd != "" {
 			c.OldVqd = c.NewVqd
 			c.NewVqd = newVqd
 		}
+
+		c.RetryCount = 0
 	}()
 
 	return stream, nil
 }
 
 func (c *Chat) Fetch(content string) (*http.Response, error) {
-	// Only get a new VQD if we don't have one
 	if c.NewVqd == "" {
 		c.NewVqd = GetVQD()
 		if c.NewVqd == "" {
@@ -230,14 +241,21 @@ func (c *Chat) Fetch(content string) (*http.Response, error) {
 		return nil, fmt.Errorf("error marshaling payload: %v", err)
 	}
 
+	if os.Getenv("DEBUG") == "true" {
+		color.Cyan("Payload: %s", string(jsonPayload))
+	}
+
 	req, err := http.NewRequest("POST", models.ChatURL, bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %v", err)
 	}
 
-	req.Header.Set("x-vqd-4", c.NewVqd)
-	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Referer", "https://duckduckgo.com/")
+	req.Header.Set("Origin", "https://duckduckgo.com")
+	req.Header.Set("x-vqd-4", c.NewVqd)
 
 	resp, err := c.Client.Do(req)
 	if err != nil {
@@ -248,22 +266,22 @@ func (c *Chat) Fetch(content string) (*http.Response, error) {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 
-		// If we get a VQD error, wait a bit before retrying
+		if os.Getenv("DEBUG") == "true" {
+			color.Red("Request Headers: %+v", req.Header)
+			color.Red("Response Headers: %+v", resp.Header)
+		}
+
 		if resp.StatusCode == 429 || strings.Contains(string(body), "ERR_INVALID_VQD") {
 			time.Sleep(1 * time.Second)
 			c.NewVqd = GetVQD()
-			if c.NewVqd != "" {
-				req.Header.Set("x-vqd-4", c.NewVqd)
-				resp, err = c.Client.Do(req)
-				if err == nil && resp.StatusCode == http.StatusOK {
-					return resp, nil
-				}
+			if c.NewVqd != "" && c.RetryCount < 3 {
+				c.RetryCount++
+				return c.Fetch(content)
 			}
 		}
 		return nil, fmt.Errorf("%d: Failed to send message. %s. Body: %s", resp.StatusCode, resp.Status, string(body))
 	}
 
-	// Update VQD only if the response is valid
 	newVqd := resp.Header.Get("x-vqd-4")
 	if newVqd != "" {
 		c.OldVqd = c.NewVqd
@@ -301,7 +319,6 @@ func (c *Chat) AddURLContext(url string) error {
 	return nil
 }
 
-// Add a new function to display the menu on demand
 func PrintCommands() {
 	color.Yellow("Type /help to show these commands again")
 }
@@ -323,7 +340,7 @@ func PrintWelcomeMessage() {
 
 func HandleURLCommand(c *Chat, input string) {
 	url := strings.TrimPrefix(input, "/url ")
-	color.Yellow("Scraping URL: %s (this may take a few seconds...)")
+	color.Yellow("Scraping URL: %s (this may take a few seconds...)", url)
 
 	if err := c.AddURLContext(url); err != nil {
 		color.Red("URL error: %v", err)
@@ -353,7 +370,7 @@ func HandleExportCommand(c *Chat, cfg *config.Config) {
 	case "3":
 		filename, content = c.Export("code_block", "")
 	case "4":
-		searchText := readSearchInput() // Already well formatted in input.go
+		searchText := readSearchInput()
 		if searchText == "" {
 			color.Yellow("⚠️ Search text cannot be empty")
 			return
@@ -383,7 +400,6 @@ func HandleExportCommand(c *Chat, cfg *config.Config) {
 	color.Green("✅ Saved to: %s", fullPath)
 }
 
-// Add this helper function for consistency
 func readLine(reader *bufio.Reader) string {
 	input, _ := reader.ReadString('\n')
 	return strings.TrimSpace(input)
