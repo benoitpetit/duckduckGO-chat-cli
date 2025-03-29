@@ -28,6 +28,9 @@
 
 
 ## Installation
+[Last Release version](https://github.com/benoitpetit/duckduckGO-chat-cli/releases/latest)
+
+
 
 ### 1. Direct Download & Run
 
@@ -40,9 +43,8 @@ $exe="duckduckgo-chat-cli_windows_amd64.exe"; Invoke-WebRequest -Uri ((Invoke-Re
 **Linux (curl)**
 
 ```bash
-curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest | grep -oP 'https.*v[0-9]+\.[0-9]+\.[0-9]+_linux_amd64' | head -1) && chmod +x duckduckgo-chat-cli_v*_linux_amd64 && ./duckduckgo-chat-cli_v*_linux_amd64
+curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest | grep -oP 'https.*linux_amd64' | grep -oP 'https.*v[0-9]+\.[0-9]+\.[0-9]+_linux_amd64' | head -1) && chmod +x duckduckgo-chat-cli_v*_linux_amd64 && ./duckduckgo-chat-cli_v*_linux_amd64
 ```
-
 ### 2. Build from source
 
 Prerequisites:
