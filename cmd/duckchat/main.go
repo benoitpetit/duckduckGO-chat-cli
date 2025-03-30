@@ -122,6 +122,6 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, input string) {
 	case input == "/help":
 		chat.PrintWelcomeMessage()
 	default:
-		chat.ProcessInput(chatSession, input)
+		chat.ProcessInput(chatSession, input, cfg)
 	}
 }

@@ -125,17 +125,29 @@ func clearTerminal() {
 	cmd.Run()
 }
 
-func ProcessInput(c *Chat, input string) {
+func ProcessInput(c *Chat, input string, cfg *config.Config) {
 	if strings.TrimSpace(input) == "" {
 		return
 	}
 
+	// Check if this is the first message and if a GlobalPrompt is defined
+	isFirstMessage := len(c.Messages) == 0
+
+	// If it's the first message, combine GlobalPrompt and user message
+	actualMessage := input
+	if isFirstMessage && cfg.GlobalPrompt != "" {
+		// For the API, send GlobalPrompt and user message together
+		actualMessage = cfg.GlobalPrompt + "\n\n" + input
+	}
+
+	// Add the combined message (or just user message) to send to the API
 	c.Messages = append(c.Messages, Message{
 		Role:    "user",
-		Content: input,
+		Content: actualMessage,
 	})
 
-	stream, err := c.FetchStream(input)
+	// Send the message and display the response
+	stream, err := c.FetchStream(actualMessage)
 	if err != nil {
 		color.Red("Error: %v", err)
 		return

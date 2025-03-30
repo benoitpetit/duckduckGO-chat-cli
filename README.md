@@ -9,8 +9,8 @@
 
 ## Key Features
 
-| Chat Experience       | Context Enhancement     | Productivity Tools       |
-|:---------------------|:-----------------------|:------------------------|
+| Chat Experience      | Context Enhancement    | Productivity Tools      |
+| :------------------- | :--------------------- | :---------------------- |
 | Streaming responses  | Web search integration | Clipboard integration   |
 | Multiple AI models   | File content importing | Flexible export options |
 | Terminal integration | URL content scraping   | Conversation history    |
@@ -18,19 +18,17 @@
 
 ## Available Models
 
-| Model Name | Integration ID | Alias | Strength | Best For | Characteristics |
-|:-----------|:--------------|:------|:---------|:---------|:----------------|
-| **GPT-4o mini** | gpt-4o-mini | gpt-4o-mini | General purpose | Everyday questions | • Fast<br>• Well-balanced |
-| **Claude 3 Haiku** | claude-3-haiku-20240307 | claude-3-haiku | Creative writing | Explanations & summaries | • Clear responses<br>• Concise |
-| **Llama 3.3 70B** | meta-llama/Llama-3.3-70B-Instruct-Turbo | llama | Programming | Code-related tasks | • Technical precision<br>• Detailed |
-| **Mistral Small** | mistralai/Mistral-Small-24B-Instruct-2501 | mixtral | Knowledge & analysis | Complex topics | • Reasoning<br>• Logic-focused |
-| **o3-mini** | o3-mini | o3mini | Speed | Quick answers | • Very fast<br>• Compact responses |
-
+| Model Name         | Integration ID                            | Alias          | Strength             | Best For                 | Characteristics                     |
+| :----------------- | :---------------------------------------- | :------------- | :------------------- | :----------------------- | :---------------------------------- |
+| **GPT-4o mini**    | gpt-4o-mini                               | gpt-4o-mini    | General purpose      | Everyday questions       | • Fast<br>• Well-balanced           |
+| **Claude 3 Haiku** | claude-3-haiku-20240307                   | claude-3-haiku | Creative writing     | Explanations & summaries | • Clear responses<br>• Concise      |
+| **Llama 3.3 70B**  | meta-llama/Llama-3.3-70B-Instruct-Turbo   | llama          | Programming          | Code-related tasks       | • Technical precision<br>• Detailed |
+| **Mistral Small**  | mistralai/Mistral-Small-24B-Instruct-2501 | mixtral        | Knowledge & analysis | Complex topics           | • Reasoning<br>• Logic-focused      |
+| **o3-mini**        | o3-mini                                   | o3mini         | Speed                | Quick answers            | • Very fast<br>• Compact responses  |
 
 ## Installation
+
 [Last Release version](https://github.com/benoitpetit/duckduckGO-chat-cli/releases/latest)
-
-
 
 ### 1. Direct Download & Run
 
@@ -45,6 +43,7 @@ $exe="duckduckgo-chat-cli_windows_amd64.exe"; Invoke-WebRequest -Uri ((Invoke-Re
 ```bash
 curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest | grep -oP 'https.*linux_amd64' | grep -oP 'https.*v[0-9]+\.[0-9]+\.[0-9]+_linux_amd64' | head -1) && chmod +x duckduckgo-chat-cli_v*_linux_amd64 && ./duckduckgo-chat-cli_v*_linux_amd64
 ```
+
 ### 2. Build from source
 
 Prerequisites:
@@ -117,6 +116,7 @@ GPT-4 Mini: Sure! Here are the key points...
 | Option           | Description               | Default              | Range              |
 | ---------------- | ------------------------- | -------------------- | ------------------ |
 | `DefaultModel`   | Starting AI model         | gpt-4o-mini          | 5 models available |
+| `GlobalPrompt`   | System prompt always sent | ""                   | Any text           |
 | `ExportDir`      | Export directory          | ~/Documents/duckchat | Any valid path     |
 | `ShowMenu`       | Display commands on start | true                 | true/false         |
 | `SearchSettings` | Search behavior config    | N/A                  | See below          |

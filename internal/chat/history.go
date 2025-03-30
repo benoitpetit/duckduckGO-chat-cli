@@ -20,8 +20,18 @@ func PrintHistory(c *Chat) {
 
 	// add a newline before printing the history
 	fmt.Println()
-
 	for i, msg := range c.Messages {
+		// Skip the first message if it contains a GlobalPrompt
+		if i == 0 && msg.Role == "user" && strings.Contains(msg.Content, "\n\n") {
+			// Extract the visible part of the message (after GlobalPrompt)
+			parts := strings.SplitN(msg.Content, "\n\n", 2)
+			if len(parts) == 2 {
+				dimBlue.Print("You: ")
+				dimWhite.Println(parts[1])
+				continue
+			}
+		}
+
 		if msg.Role == "user" {
 			dimBlue.Print("You: ")
 			dimWhite.Println(msg.Content)

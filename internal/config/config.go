@@ -31,6 +31,7 @@ type Config struct {
 	LastUpdateTime time.Time    `json:"last_update_time"`
 	Search         SearchConfig `json:"search"`
 	ShowMenu       bool         `json:"show_menu"`
+	GlobalPrompt   string       `json:"global_prompt"`
 }
 
 func Initialize() *Config {
@@ -135,11 +136,12 @@ func HandleConfiguration(cfg *Config, chatSession interfaces.ChatSession) {
 		color.White("2. Export Directory: %s", cfg.ExportDir)
 		color.White("3. Search Settings")
 		color.White("4. Show Commands Menu: %v", cfg.ShowMenu)
-		color.White("5. Back to chat")
+		color.White("5. Global Prompt")
+		color.White("6. Back to chat")
 
 		// read user input
 		reader := bufio.NewReader(os.Stdin)
-		color.Blue("\nEnter your choice (1-5): ")
+		color.Blue("\nEnter your choice (1-6): ")
 		choice := readInput(reader)
 
 		switch choice {
@@ -151,7 +153,9 @@ func HandleConfiguration(cfg *Config, chatSession interfaces.ChatSession) {
 			handleSearchSettings(cfg)
 		case "4":
 			handleShowMenuChange(cfg)
-		case "5", "":
+		case "5":
+			handleGlobalPromptChange(cfg)
+		case "6", "":
 			return
 		default:
 			color.Red("Invalid choice. Please try again.")
@@ -284,4 +288,26 @@ func handleShowMenuChange(cfg *Config) {
 	cfg.ShowMenu = !cfg.ShowMenu
 	saveConfig(cfg)
 	color.Green("Show commands menu updated to: %v", cfg.ShowMenu)
+}
+
+func handleGlobalPromptChange(cfg *Config) {
+	color.Yellow("\nGlobal Prompt:")
+	if cfg.GlobalPrompt != "" {
+		color.White("Current prompt: %s", cfg.GlobalPrompt)
+	} else {
+		color.White("No global prompt set")
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	color.Blue("\nEnter new global prompt (or leave empty to disable):\n")
+	prompt := readInput(reader)
+
+	if prompt == "" {
+		color.Yellow("Global prompt disabled")
+	} else {
+		color.Green("Global prompt set to: %s", prompt)
+	}
+
+	cfg.GlobalPrompt = prompt
+	saveConfig(cfg)
 }
