@@ -258,7 +258,33 @@ Persistent connection issues may require:
 - Using a different network connection
 - A VPN service like [Cloudflare WARP](https://1.1.1.1/)
 
-## 📜 License & Ethics
+## 🚀🚀 Related Projects
+
+This project is part of a suite of DuckDuckGo AI Chat tools:
+
+### 🌐 **DuckDuckGo Chat Web Interface**
+**Repository:** [github.com/benoitpetit/duckduckGO-chat-interface](https://github.com/benoitpetit/duckduckGO-chat-interface)
+
+A modern web-based interface for DuckDuckGo AI Chat featuring:
+- Clean, responsive design
+- Real-time streaming responses
+- Multi-model support
+- Context management tools
+- Export and sharing capabilities
+
+### 🚀 **DuckDuckGo Chat API**
+**Repository:** [github.com/benoitpetit/duckduckGO-chat-api](https://github.com/benoitpetit/duckduckGO-chat-api)
+
+A RESTful API server for DuckDuckGo AI Chat integration:
+- HTTP/HTTPS API endpoints
+- Authentication handling
+- Request/response management
+- Perfect for integrating into existing applications
+- Supports all available AI models
+
+> 💡 **Choose your preferred interface:** Command-line (this project), web browser, or API integration!
+
+## �📜 License & Ethics
 
 ### 🛡️ Privacy & Responsibility
 
