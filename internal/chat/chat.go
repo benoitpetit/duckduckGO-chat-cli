@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,6 +33,9 @@ type Chat struct {
 	CookieJar  *cookiejar.Jar
 	LastHash   string
 	RetryCount int
+	FeSignals  string
+	FeVersion  string
+	VqdHash1   string
 }
 
 type Message struct {
@@ -39,9 +43,22 @@ type Message struct {
 	Role    string `json:"role"`
 }
 
+type ToolChoice struct {
+	NewsSearch      bool `json:"NewsSearch"`
+	VideosSearch    bool `json:"VideosSearch"`
+	LocalSearch     bool `json:"LocalSearch"`
+	WeatherForecast bool `json:"WeatherForecast"`
+}
+
+type Metadata struct {
+	ToolChoice ToolChoice `json:"toolChoice"`
+}
+
 type ChatPayload struct {
-	Model    models.Model `json:"model"`
-	Messages []Message    `json:"messages"`
+	Model       models.Model `json:"model"`
+	Metadata    Metadata     `json:"metadata"`
+	Messages    []Message    `json:"messages"`
+	CanUseTools bool         `json:"canUseTools"`
 }
 
 func InitializeSession(cfg *config.Config) *Chat {
@@ -63,7 +80,38 @@ func setTerminalTitle(title string) {
 
 func NewChat(vqd string, model models.Model) *Chat {
 	jar, _ := cookiejar.New(nil)
-	return &Chat{
+
+	// Set required cookies avec TOUS les cookies pour une session authentique
+	u, _ := url.Parse("https://duckduckgo.com")
+	cookies := []*http.Cookie{
+		{Name: "5", Value: "1", Domain: ".duckduckgo.com"},
+		{Name: "dcm", Value: "3", Domain: ".duckduckgo.com"},
+		{Name: "dcs", Value: "1", Domain: ".duckduckgo.com"},
+		// Cookies supplémentaires basés sur l'analyse de l'image du navigateur
+		{Name: "duckassist-opt-in-count", Value: "1", Domain: ".duckduckgo.com"},
+		{Name: "isRecentChatOn", Value: "1", Domain: ".duckduckgo.com"},
+		{Name: "preferredDuckAiModel", Value: "3", Domain: ".duckduckgo.com"},
+	}
+	jar.SetCookies(u, cookies)
+
+	// Try to get dynamic headers
+	var feSignals, feVersion, vqdHash1 string
+
+	color.Yellow("⌛ Attempting to extract dynamic headers from DuckDuckGo...")
+	if dynamicHeaders, err := ExtractDynamicHeaders(); err == nil {
+		feSignals = dynamicHeaders.FeSignals
+		feVersion = dynamicHeaders.FeVersion
+		vqdHash1 = dynamicHeaders.VqdHash1
+		color.Green("✅ Successfully extracted dynamic headers")
+	} else {
+		color.Yellow("⚠️ Failed to get dynamic headers, falling back to placeholders. Error: %v", err)
+		// Fallback to working static values
+		feSignals = "eyJzdGFydCI6MTc0OTgyNTIxMDQ0MiwiZXZlbnRzIjpbeyJuYW1lIjoic3RhcnROZXdDaGF0IiwiZGVsdGEiOjQxfV0sImVuZCI6NDk2OX0="
+		feVersion = "serp_20250613_085800_ET-cafd73f97f51c983eb30"
+		vqdHash1 = "eyJzZXJ2ZXJfaGFzaGVzIjpbIkJEcjlUQ0o0ZzB4aG9UZ1BmSDI0Lzg3SUg0TFRqeFRYQkRvcU9KY2tKRFU9IiwidjY5enNacDErcUJCNWhzUDhwQ0I0aHUyR0pwQlpIeFhzNlRtQ1RtcXlMRT0iXSwiY2xpZW50X2hhc2hlcyI6WyJpRTNqeXRnSm0xZGJaZlo1bW81M1NmaVAxdXUxeEdzY0F5RnB3V2NVOUtrPSIsImlqZHFtVzl0ZnBXTHZXaW9ka2twYnFLSjdTaUEzb3MxakxrZm9HcWozOFk9Il0sInNpZ25hbHMiOnt9LCJtZXRhIjp7InYiOiIzIiwiY2hhbGxlbmdlX2lkIjoiZGFmMjlmMTdjNzQ2MDQ2ZTU4NjlhYmI4NjgyNGMxNmE1NTQ4MDlhZDFiNjE5ZWI5MTFkZWJmNTc2NzU2NzM3NGg4amJ0IiwidGltZXN0YW1wIjoiMTc0OTgyNTIwOTg1MCIsIm9yaWdpbiI6Imh0dHBzOi8vZHVja2R1Y2tnby5jb20iLCJzdGFjayI6IkVycm9yXG5hdCBiYSAoaHR0cHM6Ly9kdWNrZHVja2dvLmNvbS9kaXN0L3dwbS5jaGF0LmNhZmQ3M2Y5N2Y1MWM5ODNlYjMwLmpzOjE6NzQ4MDMpXG5hdCBhc3luYyBkaXNwYXRjaFNlcnZpY2VJbml0aWFsVlFEIChodHRwczovL2R1Y2tkdWNrZ28uY29tL2Rpc3Qvd3BtLmNoYXQuY2FmZDczZjk3ZjUxYzk4M2ViMzAuanM6MTo5OTUyOSkifX0="
+	}
+
+	chat := &Chat{
 		OldVqd:     vqd,
 		NewVqd:     vqd,
 		Model:      model,
@@ -71,27 +119,56 @@ func NewChat(vqd string, model models.Model) *Chat {
 		CookieJar:  jar,
 		Client:     &http.Client{Timeout: 30 * time.Second, Jar: jar},
 		RetryCount: 0,
+		FeSignals:  feSignals,
+		FeVersion:  feVersion,
+		VqdHash1:   vqdHash1,
 	}
+
+	return chat
 }
 
 func GetVQD() string {
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	// Set up cookies avec TOUS les cookies nécessaires
+	jar, _ := cookiejar.New(nil)
+	u, _ := url.Parse("https://duckduckgo.com")
+	cookies := []*http.Cookie{
+		{Name: "5", Value: "1", Domain: ".duckduckgo.com"},
+		{Name: "dcm", Value: "3", Domain: ".duckduckgo.com"},
+		{Name: "dcs", Value: "1", Domain: ".duckduckgo.com"},
+		// Cookies supplémentaires pour une session authentique
+		{Name: "duckassist-opt-in-count", Value: "1", Domain: ".duckduckgo.com"},
+		{Name: "isRecentChatOn", Value: "1", Domain: ".duckduckgo.com"},
+		{Name: "preferredDuckAiModel", Value: "3", Domain: ".duckduckgo.com"},
+	}
+	jar.SetCookies(u, cookies)
+	client.Jar = jar
+
 	req, _ := http.NewRequest("GET", models.StatusURL, nil)
 	req.Header.Set("Accept", "*/*")
-	req.Header.Set("Accept-Language", "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
-	req.Header.Set("x-vqd-accept", "1")
+	req.Header.Set("Accept-Language", "fr-FR,fr;q=0.6")
+	req.Header.Set("Cache-Control", "no-store")
+	req.Header.Set("DNT", "1")
+	req.Header.Set("Priority", "u=1, i")
 	req.Header.Set("Referer", "https://duckduckgo.com/")
-	resp, err := http.DefaultClient.Do(req)
+	req.Header.Set("Sec-CH-UA", `"Brave";v="137", "Chromium";v="137", "Not/A)Brand";v="24"`)
+	req.Header.Set("Sec-CH-UA-Mobile", "?0")
+	req.Header.Set("Sec-CH-UA-Platform", `"Windows"`)
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Sec-GPC", "1")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36")
+	req.Header.Set("x-vqd-accept", "1")
+
+	resp, err := client.Do(req)
 	if err != nil {
 		color.Red("Error fetching VQD: %v", err)
 		return ""
 	}
 	defer resp.Body.Close()
 	return resp.Header.Get("x-vqd-4")
-}
-
-func (c *Chat) generateClientHash() string {
-	return ""
 }
 
 func (c *Chat) Clear(cfg *config.Config) {
@@ -101,6 +178,8 @@ func (c *Chat) Clear(cfg *config.Config) {
 		c.Messages = []Message{}
 		c.NewVqd = GetVQD()
 		c.OldVqd = c.NewVqd
+		// Hash will be refreshed on next request if needed
+		c.RetryCount = 0
 		color.Green("Chat history and context cleared")
 	} else {
 		color.Yellow("Chat is already empty")
@@ -243,9 +322,20 @@ func (c *Chat) Fetch(content string) (*http.Response, error) {
 		}
 	}
 
+	// VQD hash is now initialized during chat creation
+
 	payload := ChatPayload{
-		Model:    c.Model,
-		Messages: c.Messages,
+		Model: c.Model,
+		Metadata: Metadata{
+			ToolChoice: ToolChoice{
+				NewsSearch:      false,
+				VideosSearch:    false,
+				LocalSearch:     false,
+				WeatherForecast: false,
+			},
+		},
+		Messages:    c.Messages,
+		CanUseTools: true,
 	}
 
 	jsonPayload, err := json.Marshal(payload)
@@ -262,12 +352,29 @@ func (c *Chat) Fetch(content string) (*http.Response, error) {
 		return nil, fmt.Errorf("error creating request: %v", err)
 	}
 
+	// Set all required headers based on the curl requests
 	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Accept-Language", "fr-FR,fr;q=0.6")
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
-	req.Header.Set("Referer", "https://duckduckgo.com/")
+	req.Header.Set("DNT", "1")
 	req.Header.Set("Origin", "https://duckduckgo.com")
+	req.Header.Set("Priority", "u=1, i")
+	req.Header.Set("Referer", "https://duckduckgo.com/")
+	req.Header.Set("Sec-CH-UA", `"Brave";v="137", "Chromium";v="137", "Not/A)Brand";v="24"`)
+	req.Header.Set("Sec-CH-UA-Mobile", "?0")
+	req.Header.Set("Sec-CH-UA-Platform", `"Windows"`)
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Sec-GPC", "1")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36")
+	req.Header.Set("x-fe-signals", c.FeSignals)
+	req.Header.Set("x-fe-version", c.FeVersion)
 	req.Header.Set("x-vqd-4", c.NewVqd)
+
+	if c.VqdHash1 != "" {
+		req.Header.Set("x-vqd-hash-1", c.VqdHash1)
+	}
 
 	resp, err := c.Client.Do(req)
 	if err != nil {
@@ -281,13 +388,24 @@ func (c *Chat) Fetch(content string) (*http.Response, error) {
 		if os.Getenv("DEBUG") == "true" {
 			color.Red("Request Headers: %+v", req.Header)
 			color.Red("Response Headers: %+v", resp.Header)
+			color.Red("Response Status: %d", resp.StatusCode)
+			color.Red("Response Body: %s", string(body))
 		}
 
-		if resp.StatusCode == 429 || strings.Contains(string(body), "ERR_INVALID_VQD") {
-			time.Sleep(1 * time.Second)
+		// Handle various error conditions including 418 (I'm a teapot)
+		if resp.StatusCode == 418 || resp.StatusCode == 429 || strings.Contains(string(body), "ERR_INVALID_VQD") {
+			time.Sleep(2 * time.Second)
+
+			// Refresh both VQD and dynamic headers on 418 errors
 			c.NewVqd = GetVQD()
+			if resp.StatusCode == 418 && c.RetryCount == 0 {
+				color.Yellow("🔄 Error 418 detected, refreshing headers...")
+				c.RefreshDynamicHeaders() // Try refreshing headers on first 418 error
+			}
+
 			if c.NewVqd != "" && c.RetryCount < 3 {
 				c.RetryCount++
+				color.Yellow("Retrying request (attempt %d/3)...", c.RetryCount)
 				return c.Fetch(content)
 			}
 		}
@@ -346,6 +464,7 @@ func PrintWelcomeMessage() {
 	color.White("/copy - Copy to clipboard")
 	color.White("/config - Configure settings")
 	color.White("/model - Change AI model")
+	color.White("/version - Show version info")
 	color.White("/help - Show this menu")
 	color.White("/exit - Quit")
 }
@@ -417,9 +536,35 @@ func readLine(reader *bufio.Reader) string {
 	return strings.TrimSpace(input)
 }
 
+func (c *Chat) RefreshDynamicHeaders() error {
+	color.Yellow("🔄 Refreshing dynamic headers...")
+
+	if dynamicHeaders, err := ExtractDynamicHeaders(); err == nil {
+		c.FeSignals = dynamicHeaders.FeSignals
+		c.FeVersion = dynamicHeaders.FeVersion
+		c.VqdHash1 = dynamicHeaders.VqdHash1
+		color.Green("✅ Headers refreshed successfully")
+		return nil
+	} else {
+		color.Yellow("⚠️ Failed to refresh headers: %v", err)
+		return err
+	}
+}
+
 func (c *Chat) ChangeModel(model models.Model) {
 	c.Model = model
 	displayName := shortenModelName(string(model))
 	setTerminalTitle(fmt.Sprintf("DuckDuckGo Chat - %s", displayName))
+
+	// Refresh headers when changing model as they might be model-specific
+	if err := c.RefreshDynamicHeaders(); err != nil {
+		color.Yellow("⚠️ Continuing with existing headers after refresh failure")
+	}
+
+	// Also refresh VQD token
+	c.NewVqd = GetVQD()
+	c.OldVqd = c.NewVqd
+	c.RetryCount = 0
+
 	color.Green("Model changed to: %s", displayName)
 }

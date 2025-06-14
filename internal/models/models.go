@@ -30,13 +30,13 @@ const (
 	Claude3  Model = "claude-3-haiku-20240307"
 	Llama    Model = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
 	Mixtral  Model = "mistralai/Mistral-Small-24B-Instruct-2501"
-	o3mini   Model = "o3-mini"
+	o4mini   Model = "o4-mini"
 
 	GPT4MiniAlias ModelAlias = "gpt-4o-mini"
 	Claude3Alias  ModelAlias = "claude-3-haiku"
 	LlamaAlias    ModelAlias = "llama"
 	MixtralAlias  ModelAlias = "mixtral"
-	o3miniAlias   ModelAlias = "o3mini"
+	o4miniAlias   ModelAlias = "o4mini"
 )
 
 var modelMap = map[ModelAlias]Model{
@@ -44,7 +44,7 @@ var modelMap = map[ModelAlias]Model{
 	Claude3Alias:  Claude3,
 	LlamaAlias:    Llama,
 	MixtralAlias:  Mixtral,
-	o3miniAlias:   o3mini,
+	o4miniAlias:   o4mini,
 }
 
 func GetModel(alias string) Model {
@@ -209,7 +209,7 @@ func HandleModelChange(chat interface{}, modelArg string) ModelAlias {
 	color.White("2) Claude-3-haiku")
 	color.White("3) Llama 3.3")
 	color.White("4) Mistral Small 3")
-	color.White("5) o3-mini")
+	color.White("5) o4-mini")
 	color.White("6) Cancel")
 
 	reader := bufio.NewReader(os.Stdin)
@@ -228,8 +228,8 @@ func validateModelChoice(choice string) ModelAlias {
 		return LlamaAlias
 	case "4", "mixtral":
 		return MixtralAlias
-	case "5", "o3mini":
-		return o3miniAlias
+	case "5", "o4mini":
+		return o4miniAlias
 	case "6", "cancel":
 		color.Yellow("Model change canceled")
 		return ""

@@ -174,7 +174,7 @@ func handleModelChange(cfg *Config, chatSession interfaces.ChatSession) {
 	color.White("2. Claude 3 Haiku")
 	color.White("3. Llama 3.3 70B")
 	color.White("4. Mistral Small 3")
-	color.White("5. o3-mini")
+	color.White("5. o4-mini")
 
 	reader := bufio.NewReader(os.Stdin)
 	color.Blue("\nEnter your choice (1-5): ")
@@ -185,7 +185,7 @@ func handleModelChange(cfg *Config, chatSession interfaces.ChatSession) {
 		"2": "claude-3-haiku",
 		"3": "llama",
 		"4": "mixtral",
-		"5": "o3mini",
+		"5": "o4mini",
 	}
 
 	if model, ok := modelMap[choice]; ok {

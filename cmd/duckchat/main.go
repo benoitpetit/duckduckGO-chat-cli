@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -14,6 +15,9 @@ import (
 
 	"github.com/fatih/color"
 )
+
+// Version will be set at build time via ldflags
+var Version = "dev"
 
 func main() {
 	// create a channel to listen for interrupts
@@ -121,6 +125,10 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, input string) {
 		}
 	case input == "/help":
 		chat.PrintWelcomeMessage()
+	case input == "/version":
+		color.Green("DuckDuckGo AI Chat CLI version %s", Version)
+		color.White("Go version: %s", runtime.Version())
+		color.White("OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
 	default:
 		chat.ProcessInput(chatSession, input, cfg)
 	}

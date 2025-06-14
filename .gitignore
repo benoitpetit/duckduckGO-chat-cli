@@ -27,3 +27,7 @@ duckduckchat
 
 # build output
 build/
+
+# Executable binaries
+duckduckgo-chat-cli
+duckduckgo-chat-cli_*
