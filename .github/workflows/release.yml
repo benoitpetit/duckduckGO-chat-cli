@@ -1,0 +1,323 @@
+name: 🚀 Build and Release
+
+on:
+  pull_request:
+    branches: [ prod ]
+    types: [ closed ]
+  push:
+    branches: [ prod ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.2.0)'
+        required: true
+        type: string
+
+env:
+  GO_VERSION: '1.21'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build-and-release:
+    if: github.event.pull_request.merged == true || github.ref == 'refs/heads/prod' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 🔄 Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: 🐹 Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: 📦 Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: 🏷️ Determine version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          # Get the latest version and auto-increment
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "1.1.5")
+          IFS='.' read -r -a VERSION_PARTS <<< "$LAST_TAG"
+          MAJOR=${VERSION_PARTS[0]}
+          MINOR=${VERSION_PARTS[1]}
+          PATCH=${VERSION_PARTS[2]}
+          
+          # Increment patch version
+          PATCH=$((PATCH + 1))
+          VERSION="${MAJOR}.${MINOR}.${PATCH}"
+        fi
+        
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "🏷️ Building version: $VERSION"
+
+    - name: ✅ Validate version format
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        if ! [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Invalid version format: $VERSION"
+          echo "Please use X.X.X format (e.g. 1.0.0)"
+          exit 1
+        fi
+        echo "✅ Version format is valid: $VERSION"
+
+    - name: 🔍 Check if version exists
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+          echo "❌ Version v$VERSION already exists!"
+          exit 1
+        fi
+        echo "✅ Version v$VERSION is available"
+
+    - name: 📦 Build binaries
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        BUILD_DIR="build"
+        
+        echo "🚀 Building DuckDuckGo Chat CLI v$VERSION..."
+        
+        # Create build directory
+        mkdir -p $BUILD_DIR
+        rm -rf $BUILD_DIR/*
+        
+        # Build for Linux
+        echo "📦 Building Linux AMD64..."
+        GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=v$VERSION" -o $BUILD_DIR/duckduckgo-chat-cli_v${VERSION}_linux_amd64 ./cmd/duckchat/main.go
+        
+        # Build for Windows
+        echo "📦 Building Windows AMD64..."
+        GOOS=windows GOARCH=amd64 go build -ldflags "-X main.Version=v$VERSION" -o $BUILD_DIR/duckduckgo-chat-cli_v${VERSION}_windows_amd64.exe ./cmd/duckchat/main.go
+        
+        # Build for Apple Silicon
+        echo "📦 Building Darwin ARM64..."
+        GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.Version=v$VERSION" -o $BUILD_DIR/duckduckgo-chat-cli_v${VERSION}_darwin_arm64 ./cmd/duckchat/main.go
+        
+        # Generate SHA256 hashes
+        echo "🔐 Generating SHA256 hashes..."
+        cd $BUILD_DIR
+        sha256sum duckduckgo-chat-cli_v${VERSION}_windows_amd64.exe > duckduckgo-chat-cli_v${VERSION}_windows_amd64.exe.sha256
+        sha256sum duckduckgo-chat-cli_v${VERSION}_linux_amd64 > duckduckgo-chat-cli_v${VERSION}_linux_amd64.sha256
+        sha256sum duckduckgo-chat-cli_v${VERSION}_darwin_arm64 > duckduckgo-chat-cli_v${VERSION}_darwin_arm64.sha256
+        
+        # Create release archive
+        echo "📚 Creating release archive..."
+        zip duckduckgo-chat-cli_v${VERSION}_release.zip \
+            duckduckgo-chat-cli_v${VERSION}_linux_amd64 \
+            duckduckgo-chat-cli_v${VERSION}_darwin_arm64 \
+            duckduckgo-chat-cli_v${VERSION}_windows_amd64.exe \
+            duckduckgo-chat-cli_v${VERSION}_windows_amd64.exe.sha256 \
+            duckduckgo-chat-cli_v${VERSION}_linux_amd64.sha256 \
+            duckduckgo-chat-cli_v${VERSION}_darwin_arm64.sha256
+        
+        echo "✅ Build v$VERSION complete!"
+        ls -lah
+        cd ..
+
+    - name: 🧪 Test binaries
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        BUILD_DIR="build"
+        
+        echo "🧪 Testing built binaries..."
+        
+        # Test Linux binary
+        if [ -f "$BUILD_DIR/duckduckgo-chat-cli_v${VERSION}_linux_amd64" ]; then
+          chmod +x "$BUILD_DIR/duckduckgo-chat-cli_v${VERSION}_linux_amd64"
+          echo "✅ Linux binary is executable"
+        else
+          echo "❌ Linux binary not found"
+          exit 1
+        fi
+        
+        # Check file sizes
+        echo "📊 File sizes:"
+        ls -lah $BUILD_DIR/
+
+    - name: 📝 Generate release notes
+      id: release_notes
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        
+        echo "🔍 Generating release notes..."
+        
+        # Get commits since last tag
+        if [ -n "$LAST_TAG" ]; then
+          echo "📊 Changes since $LAST_TAG:"
+          COMMITS=$(git log --pretty=format:"- %s" "$LAST_TAG"..HEAD)
+        else
+          echo "📊 Initial release - all commits:"
+          COMMITS=$(git log --pretty=format:"- %s")
+        fi
+        
+        # Categorize commits
+        FEATURES=$(echo "$COMMITS" | grep -E "^- (feat|add|new)" || true)
+        FIXES=$(echo "$COMMITS" | grep -E "^- (fix|bug)" || true)
+        IMPROVEMENTS=$(echo "$COMMITS" | grep -E "^- (improve|enhance|update|refactor)" || true)
+        DOCS=$(echo "$COMMITS" | grep -E "^- (doc|docs)" || true)
+        OTHER=$(echo "$COMMITS" | grep -vE "^- (feat|add|new|fix|bug|improve|enhance|update|refactor|doc|docs)" || true)
+        
+        # Build what's new section
+        WHATS_NEW=""
+        
+        if [ -n "$FEATURES" ]; then
+          WHATS_NEW="${WHATS_NEW}### 🆕 New Features\n${FEATURES}\n\n"
+        fi
+        
+        if [ -n "$IMPROVEMENTS" ]; then
+          WHATS_NEW="${WHATS_NEW}### ⚡ Improvements\n${IMPROVEMENTS}\n\n"
+        fi
+        
+        if [ -n "$FIXES" ]; then
+          WHATS_NEW="${WHATS_NEW}### 🐛 Bug Fixes\n${FIXES}\n\n"
+        fi
+        
+        if [ -n "$DOCS" ]; then
+          WHATS_NEW="${WHATS_NEW}### 📚 Documentation\n${DOCS}\n\n"
+        fi
+        
+        if [ -n "$OTHER" ]; then
+          WHATS_NEW="${WHATS_NEW}### 🔧 Other Changes\n${OTHER}\n\n"
+        fi
+        
+        # Fallback if no categorized commits
+        if [ -z "$WHATS_NEW" ] && [ -n "$COMMITS" ]; then
+          WHATS_NEW="### 🔄 Changes\n${COMMITS}\n\n"
+        fi
+        
+        # Default message if no commits
+        if [ -z "$WHATS_NEW" ]; then
+          WHATS_NEW="### 🆕 What's New\n- Automated build and release process\n- Cross-platform support (Linux, Windows, macOS)\n- Enhanced security with SHA256 checksums\n\n"
+        fi
+        
+        # Save to output (escape for GitHub Actions)
+        echo "WHATS_NEW<<EOF" >> $GITHUB_OUTPUT
+        echo -e "$WHATS_NEW" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        echo "✅ Release notes generated"
+
+    - name: 🏷️ Create Git tag
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        
+        # Create tag with dynamic release notes
+        cat > tag_message.txt << 'EOF'
+        🚀 Release v${{ steps.version.outputs.VERSION }}
+        
+        ${{ steps.release_notes.outputs.WHATS_NEW }}
+        ## 📦 Downloads
+        - **Linux:** `duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_linux_amd64`
+        - **Windows:** `duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_windows_amd64.exe`
+        - **macOS:** `duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_darwin_arm64`
+        - **All platforms:** `duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_release.zip`
+        
+        ## 🔐 Security
+        SHA256 checksums are provided for all binaries.
+        
+        ---
+        *Built with ♥ by GitHub Actions*
+        EOF
+        
+        git tag -a "v$VERSION" -F tag_message.txt
+        git push origin "v$VERSION"
+        
+        rm tag_message.txt
+
+    - name: 📢 Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ steps.version.outputs.VERSION }}
+        name: 🦆 DuckDuckGo Chat CLI v${{ steps.version.outputs.VERSION }}
+        body: |
+          ## 🚀 Release v${{ steps.version.outputs.VERSION }}
+          
+          ${{ steps.release_notes.outputs.WHATS_NEW }}
+          
+          ### 📦 Installation
+          
+          #### 🚀 Quick Start
+          
+          **🐧 Linux:**
+          ```bash
+          wget https://github.com/benoitpetit/duckduckGO-chat-cli/releases/download/v${{ steps.version.outputs.VERSION }}/duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_linux_amd64
+          chmod +x duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_linux_amd64
+          ./duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_linux_amd64
+          ```
+          
+          **🪟 Windows:**
+          ```powershell
+          Invoke-WebRequest -Uri "https://github.com/benoitpetit/duckduckGO-chat-cli/releases/download/v${{ steps.version.outputs.VERSION }}/duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_windows_amd64.exe" -OutFile "duckchat.exe"
+          .\duckchat.exe
+          ```
+          
+          **🍎 macOS:**
+          ```bash
+          wget https://github.com/benoitpetit/duckduckGO-chat-cli/releases/download/v${{ steps.version.outputs.VERSION }}/duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_darwin_arm64
+          chmod +x duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_darwin_arm64
+          ./duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_darwin_arm64
+          ```
+          
+          ### 🔐 Security Verification
+          
+          SHA256 checksums are provided for all binaries. Verify your download:
+          
+          ```bash
+          # Linux
+          sha256sum duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_linux_amd64
+          
+          # Windows (PowerShell)
+          Get-FileHash duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_windows_amd64.exe
+          
+          # macOS
+          shasum -a 256 duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_darwin_arm64
+          ```
+          
+          ### 📚 Documentation
+          
+          - [📖 Usage Guide](https://github.com/benoitpetit/duckduckGO-chat-cli#-usage)
+          - [⚙️ Configuration](https://github.com/benoitpetit/duckduckGO-chat-cli#-configuration)
+          - [🔬 Technical Details](https://github.com/benoitpetit/duckduckGO-chat-cli/blob/master/REVERSE_ENGINEERING_COMPLETE.md)
+          
+          ---
+          
+          **Full Changelog:** [v${{ steps.version.outputs.VERSION }}](https://github.com/benoitpetit/duckduckGO-chat-cli/compare/v1.1.5...v${{ steps.version.outputs.VERSION }})
+          
+          *🤖 Automated release generated by GitHub Actions*
+        files: |
+          build/duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_linux_amd64
+          build/duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_windows_amd64.exe
+          build/duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_darwin_arm64
+          build/duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_release.zip
+          build/duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_linux_amd64.sha256
+          build/duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_windows_amd64.exe.sha256
+          build/duckduckgo-chat-cli_v${{ steps.version.outputs.VERSION }}_darwin_arm64.sha256
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: 🎉 Success notification
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        echo "🎉 Release v$VERSION created successfully!"
+        echo "📦 Files available at: https://github.com/benoitpetit/duckduckGO-chat-cli/releases/tag/v$VERSION"

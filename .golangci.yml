@@ -1,0 +1,112 @@
+# golangci-lint configuration for DuckDuckGo Chat CLI
+# Documentation: https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+  go: "1.21"
+  modules-download-mode: readonly
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    check-shadowing: true
+    enable-all: true
+
+  gofmt:
+    simplify: true
+
+  goimports:
+    local-prefixes: github.com/benoitpetit/duckduckGO-chat-cli
+
+  golint:
+    min-confidence: 0.8
+
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+
+  misspell:
+    locale: US
+
+  unparam:
+    check-exported: false
+
+  nakedret:
+    max-func-lines: 30
+
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: false
+
+  gocritic:
+    enabled-tags:
+      - performance
+      - style
+      - experimental
+    disabled-checks:
+      - wrapperFunc
+      - dupImport # https://github.com/go-critic/go-critic/issues/845
+
+linters:
+  enable:
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Code simplifications
+    - govet         # Official Go static analysis
+    - ineffassign   # Detect useless assignments
+    - staticcheck   # Advanced static analysis
+    - typecheck     # Type checking
+    - unused        # Unused code
+    - gofmt         # Code formatting
+    - goimports     # Import management
+    - misspell      # Spelling in comments
+    - goconst       # Repeated constants detection
+    - gocritic      # Style and performance critiques
+    - nakedret      # Inappropriate naked returns detection
+    - prealloc      # Slice preallocation optimizations
+    - unparam       # Unused parameters
+
+  disable:
+    - deadcode      # Deprecated, replaced by unused
+    - varcheck      # Deprecated, replaced by unused
+    - structcheck   # Deprecated, replaced by unused
+    - maligned      # Deprecated
+    - interfacer    # Deprecated
+    - scopelint     # Deprecated
+    - golint        # Deprecated, replaced by revive
+
+issues:
+  exclude-rules:
+    # Exclude certain linters for test files
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+        - dupl
+
+    # Exclude G404 errors (weak random) for non-critical cases
+    - linters:
+        - gosec
+      text: "G404:"
+
+    # Exclude comment errors for exported functions in main.go
+    - path: cmd/duckchat/main\.go
+      linters:
+        - golint
+        - revive
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false
+
+severity:
+  default-severity: major
+  case-sensitive: false
