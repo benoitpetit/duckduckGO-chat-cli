@@ -168,7 +168,7 @@ func GetVQD() string {
 		return ""
 	}
 	defer resp.Body.Close()
-	return resp.Header.Get("x-vqd-4")
+	return resp.Header.Get("x-vqd-hash-1")
 }
 
 func (c *Chat) Clear(cfg *config.Config) {
