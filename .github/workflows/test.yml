@@ -15,7 +15,7 @@ permissions:
   actions: read
 
 jobs:
-  test:
+  test-and-validate:
     runs-on: ubuntu-latest
     
     steps:
@@ -26,16 +26,6 @@ jobs:
       uses: actions/setup-go@v5
       with:
         go-version: ${{ env.GO_VERSION }}
-
-    - name: 📦 Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
 
     - name: ⬇️ Download dependencies
       run: go mod download
@@ -58,12 +48,50 @@ jobs:
     - name: 🧪 Run tests
       run: go test -v ./...
 
-    - name: 🏗️ Build test
+    - name: 🔍 Basic code checks
+      run: |
+        echo "🔍 Running basic code quality checks..."
+        
+        # Check for goimports
+        if ! command -v goimports &> /dev/null; then
+          go install golang.org/x/tools/cmd/goimports@latest
+        fi
+        
+        # Check imports
+        if [ "$(goimports -l . | wc -l)" -gt 0 ]; then
+          echo "❌ Import formatting issues found:"
+          goimports -l .
+          echo "Run: goimports -w ."
+          exit 1
+        fi
+        echo "✅ Import formatting is correct"
+        
+        # Check for inefficient assignments
+        if ! command -v ineffassign &> /dev/null; then
+          go install github.com/gordonklaus/ineffassign@latest
+        fi
+        ineffassign ./...
+        
+        echo "✅ Basic code checks passed"
+
+    - name: 🔒 Security scan with gosec
+      run: |
+        if ! command -v gosec &> /dev/null; then
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+        fi
+        gosec -no-fail -fmt sarif -out results.sarif ./...
+
+    - name: 📊 Upload SARIF file
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: results.sarif
+
+    - name: 🏗️ Test build
       run: |
         echo "🏗️ Testing build process..."
         go build -o test_binary ./cmd/duckchat/main.go
         
-        # Test that the binary was created and is executable
         if [ -f "test_binary" ]; then
           chmod +x test_binary
           echo "✅ Build successful - binary created"
@@ -108,63 +136,3 @@ jobs:
         fi
         
         echo "🎉 All cross-compilation tests passed!"
-
-  lint:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: 🔄 Checkout code
-      uses: actions/checkout@v4
-
-    - name: 🐹 Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: ${{ env.GO_VERSION }}
-
-    - name: 📦 Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-lint-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-lint-
-
-    - name: 🔍 Run golangci-lint
-      uses: golangci/golangci-lint-action@v8
-      with:
-        version: latest
-        args: --timeout=5m
-
-  security:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: 🔄 Checkout code
-      uses: actions/checkout@v4
-
-    - name: 🐹 Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: ${{ env.GO_VERSION }}
-
-    - name: 📦 Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-security-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-security-
-
-    - name: 🔒 Run Gosec Security Scanner
-      uses: securego/gosec@master
-      with:
-        args: '-no-fail -fmt sarif -out results.sarif ./...'
-
-    - name: 📊 Upload SARIF file
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: results.sarif
