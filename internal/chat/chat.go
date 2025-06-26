@@ -432,18 +432,18 @@ func (c *Chat) AddURLContext(url string) error {
 		return fmt.Errorf("failed to scrape URL: %v", err)
 	}
 
-	if content == "" {
+	if content == nil || content.Content == "" {
 		return fmt.Errorf("no content found at URL: %s", url)
 	}
 
-	contentLength := len(content)
+	contentLength := len(content.Content)
 	if contentLength > 500 {
 		color.Cyan("Retrieved %d characters of content", contentLength)
 	}
 
 	c.Messages = append(c.Messages, Message{
 		Role:    "user",
-		Content: fmt.Sprintf("[URL Context]\nURL: %s\n\n%s", url, content),
+		Content: fmt.Sprintf("[URL Context]\nURL: %s\n\n%s", url, content.Content),
 	})
 
 	return nil
