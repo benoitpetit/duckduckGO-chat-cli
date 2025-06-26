@@ -50,7 +50,9 @@ func Initialize() *Config {
 	}
 	cfg.Search.IncludeSnippet = true // default to true
 
-	ensureExportDir(cfg)
+	if err := ensureExportDir(cfg); err != nil {
+		color.Yellow("Warning: Failed to create export directory: %v", err)
+	}
 	return cfg
 }
 
@@ -63,7 +65,9 @@ func loadConfig() *Config {
 	}
 
 	if data, err := os.ReadFile(configPath()); err == nil {
-		json.Unmarshal(data, cfg)
+		if err := json.Unmarshal(data, cfg); err != nil {
+			color.Yellow("Warning: Failed to parse config file: %v", err)
+		}
 	}
 	return cfg
 }
@@ -76,7 +80,15 @@ func defaultExportPath() string {
 }
 
 func configPath() string {
-	configDir, _ := os.UserConfigDir()
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		// Fallback to home directory if config dir is not available
+		if runtime.GOOS == "windows" {
+			configDir = filepath.Join(os.Getenv("USERPROFILE"), ".config")
+		} else {
+			configDir = filepath.Join(os.Getenv("HOME"), ".config")
+		}
+	}
 	return filepath.Join(configDir, "duckduckgo-chat-cli", "config.json")
 }
 
@@ -117,12 +129,18 @@ func AcceptTermsOfService(cfg *Config) bool {
 	color.Blue("Do you accept? (yes/no): ")
 
 	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		color.Red("Error reading input: %v", err)
+		return false
+	}
 	accepted := strings.ToLower(strings.TrimSpace(input)) == "yes"
 
 	if accepted {
 		cfg.TOSAccepted = true
-		saveConfig(cfg)
+		if err := saveConfig(cfg); err != nil {
+			color.Yellow("Warning: Failed to save config: %v", err)
+		}
 	}
 	return accepted
 }
@@ -164,7 +182,11 @@ func HandleConfiguration(cfg *Config, chatSession interfaces.ChatSession) {
 }
 
 func readInput(reader *bufio.Reader) string {
-	input, _ := reader.ReadString('\n')
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		color.Red("Error reading input: %v", err)
+		return ""
+	}
 	return strings.TrimSpace(input)
 }
 
@@ -190,7 +212,10 @@ func handleModelChange(cfg *Config, chatSession interfaces.ChatSession) {
 
 	if model, ok := modelMap[choice]; ok {
 		cfg.DefaultModel = model
-		saveConfig(cfg)
+		if err := saveConfig(cfg); err != nil {
+			color.Red("Error saving config: %v", err)
+			return
+		}
 		chatSession.ChangeModel(models.GetModel(model))
 		color.Green("Default model updated and applied: %s", model)
 	} else {
@@ -214,7 +239,10 @@ func handleExportDirChange(cfg *Config) {
 	if path != "" {
 		if err := os.MkdirAll(path, 0755); err == nil {
 			cfg.ExportDir = path
-			saveConfig(cfg)
+			if err := saveConfig(cfg); err != nil {
+				color.Red("Error saving config: %v", err)
+				return
+			}
 			color.Green("Export directory updated to: %s", path)
 		} else {
 			color.Red("Error creating directory: %v", err)
@@ -240,7 +268,10 @@ func handleSearchSettings(cfg *Config) {
 		color.Blue("Enter maximum number of results (1-20): ")
 		if max, err := strconv.Atoi(readInput(reader)); err == nil && max > 0 && max <= 20 {
 			cfg.Search.MaxResults = max
-			saveConfig(cfg)
+			if err := saveConfig(cfg); err != nil {
+				color.Red("Error saving config: %v", err)
+				return
+			}
 			color.Green("✅ Max results updated to: %d", max)
 		} else {
 			color.Red("❌ Invalid input. Must be between 1 and 20")
@@ -248,7 +279,10 @@ func handleSearchSettings(cfg *Config) {
 
 	case "2":
 		cfg.Search.IncludeSnippet = !cfg.Search.IncludeSnippet
-		saveConfig(cfg)
+		if err := saveConfig(cfg); err != nil {
+			color.Red("Error saving config: %v", err)
+			return
+		}
 		color.Green("✅ Include snippets set to: %v", cfg.Search.IncludeSnippet)
 		if cfg.Search.IncludeSnippet {
 			color.Yellow("ℹ️ Search results will include descriptions")
@@ -260,7 +294,10 @@ func handleSearchSettings(cfg *Config) {
 		color.Blue("Enter maximum number of retries (1-5): ")
 		if retries, err := strconv.Atoi(readInput(reader)); err == nil && retries > 0 && retries <= 5 {
 			cfg.Search.MaxRetries = retries
-			saveConfig(cfg)
+			if err := saveConfig(cfg); err != nil {
+				color.Red("Error saving config: %v", err)
+				return
+			}
 			color.Green("✅ Max retries updated to: %d", retries)
 		} else {
 			color.Red("❌ Invalid input. Must be between 1 and 5")
@@ -270,7 +307,10 @@ func handleSearchSettings(cfg *Config) {
 		color.Blue("Enter retry delay in seconds (1-10): ")
 		if delay, err := strconv.Atoi(readInput(reader)); err == nil && delay > 0 && delay <= 10 {
 			cfg.Search.RetryDelay = delay
-			saveConfig(cfg)
+			if err := saveConfig(cfg); err != nil {
+				color.Red("Error saving config: %v", err)
+				return
+			}
 			color.Green("✅ Retry delay updated to: %d seconds", delay)
 		} else {
 			color.Red("❌ Invalid input. Must be between 1 and 10")
@@ -286,7 +326,10 @@ func handleSearchSettings(cfg *Config) {
 
 func handleShowMenuChange(cfg *Config) {
 	cfg.ShowMenu = !cfg.ShowMenu
-	saveConfig(cfg)
+	if err := saveConfig(cfg); err != nil {
+		color.Red("Error saving config: %v", err)
+		return
+	}
 	color.Green("Show commands menu updated to: %v", cfg.ShowMenu)
 }
 
@@ -309,5 +352,7 @@ func handleGlobalPromptChange(cfg *Config) {
 	}
 
 	cfg.GlobalPrompt = prompt
-	saveConfig(cfg)
+	if err := saveConfig(cfg); err != nil {
+		color.Red("Error saving config: %v", err)
+	}
 }
