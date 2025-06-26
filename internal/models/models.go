@@ -214,7 +214,11 @@ func HandleModelChange(chat interface{}, modelArg string) ModelAlias {
 
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("\nEnter your choice (1-6): ")
-	choice, _ := reader.ReadString('\n')
+	choice, err := reader.ReadString('\n')
+	if err != nil {
+		color.Red("Error reading input: %v", err)
+		return ""
+	}
 	return validateModelChoice(strings.TrimSpace(choice))
 }
 

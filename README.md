@@ -19,7 +19,7 @@
   <a href="#-installation">Installation</a> •
   <a href="#-usage">Usage</a> •
   <a href="#-configuration">Configuration</a> •
-  <a href="REVERSE_ENGINEERING_COMPLETE.md">🔬 Reverse Engineering</a>
+  <a href="REVERSE_ENGINEERING_COMPLETE.md">Reverse Engineering</a>
 </p>
 
 ---
@@ -93,7 +93,7 @@ curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/
 </details>
 
 <details>
-<summary><strong>:apple: MacOS (curl)</strong></summary>
+<summary><strong>🍎 MacOS (curl)</strong></summary>
 
 ```bash
 curl -LO $(curl -s https://api.github.com/repos/benoitpetit/duckduckGO-chat-cli/releases/latest | grep -oP 'https.*darwin_arm64' | grep -oP 'https.*v[0-9]+\.[0-9]+\.[0-9]+_darwin_arm64' | head -1) && chmod +x duckduckgo-chat-cli_v*_darwin_arm64 && ./duckduckgo-chat-cli_v*_darwin_arm64
@@ -230,17 +230,44 @@ GPT-4 Mini: Sure! Here are the key points...
 - Chrome/Chromium 115+ (for web scraping)
 - Go 1.21+ (for building from source)
 
-## 🔬 Reverse Engineering
+## 🛠️ Development & Contributing
 
-> **📋 Technical Implementation Details**  
-> Discover the technical details of DuckDuckGo API reverse engineering, including the anti-418 solution and complete system architecture.
-> 
-> **[🔍 View complete reverse engineering documentation](REVERSE_ENGINEERING_COMPLETE.md)**
->
-> - Anti-error 418 solution (98.3% reduction)
-> - Automatic VQD token system
-> - Dynamic headers and cookie management
-> - Functional auto-recovery
+### 🚀 Automated Release Process (beta)
+
+This project uses GitHub Actions for automated building and releasing:
+
+- **Development:** Work on the `master` branch
+- **Release:** Create PR to `prod` branch to trigger automatic release
+- **CI/CD:** Automated testing, building, and publishing
+
+#### 📋 Release Workflow
+
+1. **Create a release branch:**
+   ```bash
+   ./scripts/release.sh          # Interactive mode
+   ./scripts/release.sh 1.2.0    # Specific version
+   ```
+
+2. **Or manually:**
+   ```bash
+   git checkout -b release/v1.2.0
+   git push origin release/v1.2.0
+   ```
+
+3. **Create PR from `release/v1.2.0` to `prod`**
+   - Automatic version detection
+   - Cross-platform builds (Linux, Windows, macOS)
+   - Release notes generation
+   - Asset upload with SHA256 checksums
+
+#### 🧪 Testing
+
+> comming soon
+
+### 📚 Development Documentation
+
+- **[CI/CD & Release Process](.github/README.md)** - Complete GitHub Actions documentation
+- **[🔬 Reverse Engineering](REVERSE_ENGINEERING_COMPLETE.md)** - Technical implementation details
 
 ## 🚨 Troubleshooting
 
@@ -293,7 +320,7 @@ A RESTful API server for DuckDuckGo AI Chat integration:
 
 > 💡 **Choose your preferred interface:** Command-line (this project), web browser, or API integration!
 
-## �📜 License & Ethics
+## 📜 License & Ethics
 
 ### 🛡️ Privacy & Responsibility
 

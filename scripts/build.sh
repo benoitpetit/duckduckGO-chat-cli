@@ -50,7 +50,7 @@ echo "📚 Creating release archive..."
 cd $BUILD_DIR
 zip duckduckgo-chat-cli_v${VERSION}_release.zip \
     duckduckgo-chat-cli_v${VERSION}_linux_amd64 \
-    duckduckgo-chat-cli_v${VERSION}_darwin_amd64 \
+    duckduckgo-chat-cli_v${VERSION}_darwin_arm64 \
     duckduckgo-chat-cli_v${VERSION}_windows_amd64.exe \
     duckduckgo-chat-cli_v${VERSION}_windows_amd64.exe.sha256
 cd ..

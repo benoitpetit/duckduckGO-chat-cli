@@ -56,7 +56,7 @@ func main() {
 	for {
 		select {
 		case <-sigChan:
-			// stop the input goroutine 
+			// stop the input goroutine
 			close(stopChan)
 			fmt.Println() // clear the line
 			return
