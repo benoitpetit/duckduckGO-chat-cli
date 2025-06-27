@@ -125,15 +125,14 @@ cd duckduckGO-chat-cli
 Accept terms? [yes/no] yes
 Type /help to show available commands
 
-You: /search Go concurrency patterns
-[+] Search results added
+You: /search Go concurrency patterns -- What are the best practices?
+[+] Search results added and analyzed
 
-You: /file main.go
-[+] File content processed
+You: /file main.go -- Explain this code and suggest improvements
+[+] File content processed and analyzed
 File analyzed (2.3KB)
 
-You: How can I improve this implementation?
-GPT-4 Mini: Analyzing your code...
+GPT-4 Mini: Analyzing your code and search results...
 ```
 
 </details>
@@ -142,15 +141,14 @@ GPT-4 Mini: Analyzing your code...
 <summary><strong>🧪 Example 2: Research Assistant</strong></summary>
 
 ```bash
-You: /url https://en.wikipedia.org/wiki/Quantum_computing
-[+] URL content processed
+You: /url https://en.wikipedia.org/wiki/Quantum_computing -- Summarize the key concepts
+[+] URL content processed and summarized
 Data extracted (42KB)
 
-You: /search recent quantum computing breakthroughs
-[+] Search results added (10 entries)
+You: /search recent quantum computing breakthroughs -- How do these relate to the Wikipedia content?
+[+] Search results added and analyzed (10 entries)
 
-You: Can you provide a summary of the latest advancements?
-GPT-4 Mini: Sure! Here are the key points...
+GPT-4 Mini: Based on the Wikipedia content and recent breakthroughs...
 ```
 
 </details>
@@ -159,9 +157,9 @@ GPT-4 Mini: Sure! Here are the key points...
 
 | Command           | Example                  | Description                     |
 | ----------------- | ------------------------ | ------------------------------- |
-| 🔍 `/search <query>` | `/search Go tutorials`   | Add search results as context   |
-| 📁 `/file <path>`    | `/file src/main.go`      | Import file content as context  |
-| 🌐 `/url <link>`     | `/url github.com/golang` | Add webpage content as context  |
+| 🔍 `/search <query> [-- prompt]` | `/search machine learning -- What are the best practices?`   | Add search results as context and optionally process them with a prompt   |
+| 📁 `/file <path> [-- prompt]`    | `/file src/main.go -- Explain this code`      | Import file content as context and optionally analyze it with a prompt  |
+| 🌐 `/url <link> [-- prompt]`     | `/url github.com/golang -- Summarize this page` | Add webpage content as context and optionally process it with a prompt  |
 | 🤖 `/model`          | `/model` or `/model 2`   | Change AI model (interactive)   |
 | 🧹 `/clear`          | `/clear`                 | Reset conversation context      |
 | 📤 `/export`         | `/export`                | Export content (interactive)    |

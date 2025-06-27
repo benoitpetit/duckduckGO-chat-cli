@@ -455,9 +455,9 @@ func PrintCommands() {
 
 func PrintWelcomeMessage() {
 	color.Yellow("Special commands:")
-	color.White("/search <query> - Search and add context")
-	color.White("/file <path> - Add file content")
-	color.White("/url <url> - Add webpage content")
+	color.White("/search <query> [-- request] - Search and add context, optionally make a request about results")
+	color.White("/file <path> [-- request] - Add file content and optionally make a request about it")
+	color.White("/url <url> [-- request] - Add webpage content and optionally make a request about it")
 	color.White("/clear - Clear context")
 	color.White("/history - Show history")
 	color.White("/export - Export messages")
@@ -469,14 +469,45 @@ func PrintWelcomeMessage() {
 	color.White("/exit - Quit")
 }
 
-func HandleURLCommand(c *Chat, input string) {
-	url := strings.TrimPrefix(input, "/url ")
+func HandleURLCommand(c *Chat, input string, cfg *config.Config) {
+	// Parse the command: /url <URL> -- <request>
+	commandInput := strings.TrimPrefix(input, "/url ")
+
+	var url, userRequest string
+
+	// Check if there's a -- separator
+	if strings.Contains(commandInput, " -- ") {
+		parts := strings.SplitN(commandInput, " -- ", 2)
+		url = strings.TrimSpace(parts[0])
+		if len(parts) > 1 {
+			userRequest = strings.TrimSpace(parts[1])
+		}
+	} else {
+		// Fallback: if no --, treat everything as URL for backward compatibility
+		url = strings.TrimSpace(commandInput)
+	}
+
+	if url == "" {
+		color.Red("Usage: /url <URL> [-- request]")
+		return
+	}
+
 	color.Yellow("Scraping URL: %s (this may take a few seconds...)", url)
 
+	// Add URL context first
 	if err := c.AddURLContext(url); err != nil {
 		color.Red("URL error: %v", err)
+		return
+	}
+
+	color.Green("Successfully retrieved webpage content from: %s", url)
+
+	// If user provided a specific request, process it with the URL context
+	if userRequest != "" {
+		color.Cyan("Processing your request about the webpage...")
+		ProcessInput(c, userRequest, cfg)
 	} else {
-		color.Green("Successfully added webpage content from: %s", url)
+		color.Yellow("Webpage content added to context. You can now ask questions about it.")
 	}
 }
 

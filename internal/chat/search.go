@@ -24,9 +24,25 @@ type SearchResult struct {
 }
 
 func HandleSearchCommand(c *Chat, input string, cfg *config.Config) {
-	query := strings.TrimPrefix(input, "/search ")
+	// Parse the command: /search <query> -- <request>
+	commandInput := strings.TrimPrefix(input, "/search ")
+
+	var query, userRequest string
+
+	// Check if there's a -- separator
+	if strings.Contains(commandInput, " -- ") {
+		parts := strings.SplitN(commandInput, " -- ", 2)
+		query = strings.TrimSpace(parts[0])
+		if len(parts) > 1 {
+			userRequest = strings.TrimSpace(parts[1])
+		}
+	} else {
+		// Fallback: if no --, treat everything as query for backward compatibility
+		query = strings.TrimSpace(commandInput)
+	}
+
 	if query == "" {
-		color.Red("Search query cannot be empty")
+		color.Red("Usage: /search <query> [-- request]")
 		return
 	}
 
@@ -49,6 +65,14 @@ func HandleSearchCommand(c *Chat, input string, cfg *config.Config) {
 	})
 
 	color.Green("Added %d search results to the context", len(results))
+
+	// If user provided a specific request, process it with the search context
+	if userRequest != "" {
+		color.Cyan("Processing your request about the search results...")
+		ProcessInput(c, userRequest, cfg)
+	} else {
+		color.Yellow("Search results added to context. You can now ask questions about them.")
+	}
 }
 
 func performSearch(query string, maxResults int) ([]SearchResult, error) {

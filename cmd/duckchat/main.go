@@ -104,9 +104,9 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, input string) {
 	case strings.HasPrefix(input, "/search "):
 		chat.HandleSearchCommand(chatSession, input, cfg)
 	case strings.HasPrefix(input, "/file "):
-		chat.HandleFileCommand(chatSession, input)
+		chat.HandleFileCommand(chatSession, input, cfg)
 	case strings.HasPrefix(input, "/url "):
-		chat.HandleURLCommand(chatSession, input)
+		chat.HandleURLCommand(chatSession, input, cfg)
 	case input == "/export":
 		chat.HandleExportCommand(chatSession, cfg)
 	case input == "/copy":
