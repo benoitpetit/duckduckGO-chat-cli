@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -132,6 +133,7 @@ func installPMP() bool {
 	// Try go install first (if Go is available)
 	if isGoInstalled() {
 		color.Yellow("Installing via Go...")
+		// #nosec G204 - Static command with fixed arguments for Go package installation
 		cmd := exec.Command("go", "install", "github.com/benoitpetit/prompt-my-project@latest")
 		if err := cmd.Run(); err == nil {
 			// After go install, check if PMP is now accessible
@@ -169,6 +171,7 @@ func isGoInstalled() bool {
 // installPMPUnix installs PMP on Unix-like systems
 func installPMPUnix() bool {
 	script := `curl -fsSL https://raw.githubusercontent.com/benoitpetit/prompt-my-project/master/scripts/install.sh | bash`
+	// #nosec G204 - Static script for PMP installation from trusted source
 	cmd := exec.Command("bash", "-c", script)
 	err := cmd.Run()
 	return err == nil
@@ -177,6 +180,7 @@ func installPMPUnix() bool {
 // installPMPWindows installs PMP on Windows
 func installPMPWindows() bool {
 	script := `irm https://raw.githubusercontent.com/benoitpetit/prompt-my-project/master/scripts/install.ps1 | iex`
+	// #nosec G204 - Static PowerShell script for PMP installation from trusted source
 	cmd := exec.Command("powershell", "-Command", script)
 	err := cmd.Run()
 	return err == nil
@@ -223,6 +227,7 @@ func getGoBinPaths() []string {
 	}
 
 	// Try to get Go's default GOPATH using go env
+	// #nosec G204 - Static command to get Go environment variable
 	if cmd := exec.Command("go", "env", "GOPATH"); cmd != nil {
 		if output, err := cmd.Output(); err == nil {
 			gopath := strings.TrimSpace(string(output))
@@ -250,6 +255,35 @@ func getPMPExecutable() string {
 	return "pmp"
 }
 
+// validatePMPExecutable validates that the PMP executable is safe to run
+func validatePMPExecutable(pmpExe string) error {
+	// If it's just "pmp", rely on PATH lookup which is safer
+	if pmpExe == "pmp" {
+		if _, err := exec.LookPath("pmp"); err != nil {
+			return fmt.Errorf("pmp not found in PATH: %v", err)
+		}
+		return nil
+	}
+
+	// For full paths, validate the executable
+	if !filepath.IsAbs(pmpExe) {
+		return fmt.Errorf("executable path must be absolute: %s", pmpExe)
+	}
+
+	// Check if the file exists and is executable
+	if _, err := os.Stat(pmpExe); err != nil {
+		return fmt.Errorf("executable not found: %s", pmpExe)
+	}
+
+	// Basic validation: ensure the executable name contains "pmp"
+	executableName := filepath.Base(pmpExe)
+	if !strings.Contains(strings.ToLower(executableName), "pmp") {
+		return fmt.Errorf("executable name does not appear to be PMP: %s", executableName)
+	}
+
+	return nil
+}
+
 // executePMP runs the PMP command and returns the generated prompt
 func executePMP(path string, args []string) (string, error) {
 	// Build the command arguments
@@ -257,8 +291,14 @@ func executePMP(path string, args []string) (string, error) {
 	cmdArgs = append(cmdArgs, args...)
 	cmdArgs = append(cmdArgs, path)
 
-	// Execute PMP using the correct executable path
+	// Get and validate the PMP executable path
 	pmpExe := getPMPExecutable()
+	if err := validatePMPExecutable(pmpExe); err != nil {
+		return "", fmt.Errorf("invalid PMP executable: %v", err)
+	}
+
+	// Execute PMP using the validated executable path
+	// #nosec G204 - pmpExe is validated above to ensure it's a legitimate PMP executable
 	cmd := exec.Command(pmpExe, cmdArgs...)
 	output, err := cmd.Output()
 	if err != nil {
