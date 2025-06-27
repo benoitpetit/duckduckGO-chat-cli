@@ -1,7 +1,7 @@
 # 🦆 DuckDuckGo AI Chat CLI
 
 <p align="center">
-  <img src="logo.png" width="200" alt="DuckDuckGo AI Chat CLI Logo">
+  <img src="logo.png" width="220" alt="DuckDuckGo AI Chat CLI Logo">
   <br>
   <strong>🚀 A powerful CLI tool to interact with DuckDuckGo's AI</strong><br>
   <em>Advanced context integration, multi-models and enhanced productivity</em>
@@ -26,33 +26,55 @@
 
 ## ✨ Key Features
 
-<table>
+<table align="center" style="width: 100%; border-collapse: separate; border-spacing: 8px;">
 <tr>
-<td>
+<td width="33%" style="background-color: #1e1e1e; padding: 20px; border-radius: 8px; color: #ffffff; text-align: center; vertical-align: top;">
 
-### 💬 Chat Experience
-- Streaming responses
-- Multiple AI models
-- Terminal integration
-- Auto token refresh
+<div style="margin-bottom: 15px;">
+<h3>💬 Chat Experience</h3>
+</div>
 
-</td>
-<td>
+<div style="display: inline-block; text-align: left; color: #e0e0e0;">
 
-### 🧠 Context Enhancement
-- Web search integration
-- File content importing
-- URL content scraping
-- Session management
+- 🔄 Streaming responses
+- 🤖 Multiple AI models  
+- 💻 Terminal power
+- 🔑 Auto token refresh
+
+</div>
 
 </td>
-<td>
+<td width="33%" style="background-color: #1e1e1e; padding: 20px; border-radius: 8px; color: #ffffff; text-align: center; vertical-align: top;">
 
-### 🛠️ Productivity Tools
-- Clipboard integration
-- Flexible export options
-- Conversation history
-- Customizable settings
+<div style="margin-bottom: 15px;">
+<h3>🧠 Context Datas</h3>
+</div>
+
+<div style="display: inline-block; text-align: left; color: #e0e0e0;">
+
+- 🔍 Web search
+- 📄 File content
+- 🌐 URL scraping
+- 🚀 Prompt generation
+- 💾 Session management
+
+</div>
+
+</td>
+<td width="33%" style="background-color: #1e1e1e; padding: 20px; border-radius: 8px; color: #ffffff; text-align: center; vertical-align: top;">
+
+<div style="margin-bottom: 15px;">
+<h3>🛠️ Productivity Tools</h3>
+</div>
+
+<div style="display: inline-block; text-align: left; color: #e0e0e0;">
+
+- 📋 Clipboard
+- 📤 Flexible export
+- 📝 Conversation history
+- ⚙️ Customizable settings
+
+</div>
 
 </td>
 </tr>
@@ -126,13 +148,25 @@ Accept terms? [yes/no] yes
 Type /help to show available commands
 
 You: /search Go concurrency patterns -- What are the best practices?
-[+] Search results added and analyzed
+🔍 Searching for: Go concurrency patterns
+✅ Added 10 search results to the context
+Processing your request about the search results...
 
 You: /file main.go -- Explain this code and suggest improvements
-[+] File content processed and analyzed
-File analyzed (2.3KB)
+📄 Adding file content: main.go
+✅ Successfully added content from file: main.go
+Processing your request about the file...
 
-GPT-4 Mini: Analyzing your code and search results...
+GPT-4o mini: Based on the search results about Go concurrency patterns and your code...
+[Detailed analysis follows]
+
+You: /copy
+Choose what to copy:
+1) Last Q&A exchange
+2) Largest code block
+3) Cancel
+Enter your choice: 2
+✅ Content copied to clipboard
 ```
 
 </details>
@@ -153,13 +187,88 @@ GPT-4 Mini: Based on the Wikipedia content and recent breakthroughs...
 
 </details>
 
+<details>
+<summary><strong>📦 Example 3: Project Analysis with PMP</strong></summary>
+
+```bash
+You: /pmp ./src -i "*.go" -e "test/*" -- analyze this Go codebase and suggest improvements
+⚠️ PMP (Prompt My Project) is not installed.
+Would you like to install PMP automatically? (y/n): y
+📦 Installing PMP...
+✅ PMP installed successfully!
+🔄 Generating project prompt for: ./src
+✅ Project prompt added to context (15.2KB)
+Processing your request about the project...
+
+GPT-4 Mini: Analyzing your Go codebase structure and code...
+Based on the project analysis, here are my suggestions for improvements:
+1. Code organization: Consider implementing...
+2. Error handling: I notice some patterns that could be improved...
+```
+
+</details>
+
+<details>
+<summary><strong>📚 Example 4: Library Management Workflow</strong></summary>
+
+```bash
+You: /library add ~/projects/myapp
+✅ Library added: myapp
+   Path: /home/user/projects/myapp
+
+You: /library add ~/documents/api-docs  
+✅ Library added: api-docs
+   Path: /home/user/documents/api-docs
+
+You: /library list
+📚 Configured Libraries:
+  1. myapp
+     Path: /home/user/projects/myapp
+     Files: 47 (125.3 KB)
+  2. api-docs
+     Path: /home/user/documents/api-docs
+     Files: 23 (89.1 KB)
+
+You: /library search config
+🔍 Searching for files matching: config
+Found 3 matching files:
+  1. [myapp] src/config.go (2.1 KB, 2024-01-15 14:30)
+  2. [myapp] docker/config.yml (856 B, 2024-01-15 10:22)
+  3. [api-docs] configuration.md (4.2 KB, 2024-01-14 16:45)
+
+You: /library load myapp -- analyze the architecture of this project
+📚 Loading library: myapp
+📄 Loading 47 files (125.3KB)...
+✅ Successfully loaded 47 files from library: myapp
+Processing your request about the library...
+
+GPT-4o mini: Based on the 47 files from your project, I can see this is a Go-based application with the following architecture:
+[Detailed architectural analysis follows]
+
+You: /export
+Export options:
+1. Full conversation
+2. Last AI response
+3. Largest code block
+4. Search in conversation
+5. Cancel
+
+Enter your choice (1-5): 1
+✅ Saved to: /home/user/Documents/duckchat/conversation_20240127_143022.md
+```
+
+</details>
+
+
 ### 📝 Command Reference
 
 | Command           | Example                  | Description                     |
 | ----------------- | ------------------------ | ------------------------------- |
 | 🔍 `/search <query> [-- prompt]` | `/search machine learning -- What are the best practices?`   | Add search results as context and optionally process them with a prompt   |
 | 📁 `/file <path> [-- prompt]`    | `/file src/main.go -- Explain this code`      | Import file content as context and optionally analyze it with a prompt  |
+| 📚 `/library [command] [args]`   | `/library add /path/to/docs` | Manage library directories for bulk file operations |
 | 🌐 `/url <link> [-- prompt]`     | `/url github.com/golang -- Summarize this page` | Add webpage content as context and optionally process it with a prompt  |
+| 📦 `/pmp [path] [options] [-- prompt]` | `/pmp . -i "*.go" -- analyze this codebase` | Generate structured project prompts with automatic PMP installation |
 | 🤖 `/model`          | `/model` or `/model 2`   | Change AI model (interactive)   |
 | 🧹 `/clear`          | `/clear`                 | Reset conversation context      |
 | 📤 `/export`         | `/export`                | Export content (interactive)    |
@@ -169,6 +278,75 @@ GPT-4 Mini: Based on the Wikipedia content and recent breakthroughs...
 | 🏷️ `/version`        | `/version`               | Show version and system info    |
 | ❓ `/help`           | `/help`                  | Show available commands         |
 | 🚪 `/exit`           | `/exit`                  | Exit application                |
+
+#### 📚 Library Command Details
+
+The `/library` command provides advanced file management capabilities:
+
+| Subcommand | Example | Description |
+|------------|---------|-------------|
+| `/library list` | `/library` or `/library list` | List all configured library directories |
+| `/library add <path>` | `/library add /home/user/docs` | Add a directory as a library |
+| `/library remove <n>` | `/library remove 1` | Remove library by number or name |
+| `/library search <pattern>` | `/library search readme` | Search for files across all libraries |
+| `/library search <pattern> <lib>` | `/library search config myproject` | Search in specific library |
+| `/library load <lib> [-- request]` | `/library load docs -- summarize all files` | Load all files from library into context |
+
+**Supported file types:** `.txt`, `.md`, `.json`, `.yaml`, `.yml`, `.xml`, `.csv`, `.log`, `.ini`, `.conf`, `.cfg`, `.py`, `.go`, `.js`, `.ts`, `.html`, `.css`, `.sql`, `.sh`, `.bat`, `.ps1`, `.php`, `.java`, `.cpp`, `.c`, `.h`, `.hpp`, `.rs`, `.rb`, `.pl`, `.r`
+
+#### 📦 PMP (Prompt My Project) Integration
+
+The `/pmp` command integrates with [Prompt My Project](https://github.com/benoitpetit/prompt-my-project) for advanced codebase analysis:
+
+| Usage | Example | Description |
+|-------|---------|-------------|
+| `/pmp` | `/pmp` | Generate prompt for current directory |
+| `/pmp <path>` | `/pmp ./src` | Generate prompt for specific directory |
+| `/pmp <path> [options]` | `/pmp . -i "*.go" -e "test/*"` | Filter files with include/exclude patterns |
+| `/pmp help` | `/pmp help` | Show detailed PMP usage and options |
+
+**Key Features:**
+- 🚀 **Auto-installation**: Automatically installs PMP if not found
+- 🎯 **Smart filtering**: Include/exclude files by patterns
+- 📊 **Project analysis**: Comprehensive code structure and content
+- 🔧 **Cross-platform**: Works on Linux, macOS, and Windows
+
+**Common Options:**
+- `-i "*.ext"` - Include only files matching pattern
+- `-e "pattern"` - Exclude files matching pattern  
+- `--max-files <n>` - Limit number of files (default: 500)
+- `--max-size <size>` - Maximum file size (default: 100MB)
+
+#### 📤 Export Command Details
+
+The `/export` command provides multiple export options:
+
+| Export Type | Description | Output |
+|-------------|-------------|---------|
+| **Full conversation** | Complete chat history with metadata | Markdown file with timestamps |
+| **Last AI response** | Most recent AI answer only | Formatted response with context |
+| **Largest code block** | Biggest code snippet from last response | Clean code extraction |
+| **Search in conversation** | Find and export specific content | Filtered conversation matching search terms |
+
+**Features:**
+- 📝 **Markdown format**: Well-structured output with metadata
+- 🕒 **Timestamps**: All exports include timing information
+- 🎯 **Smart filtering**: Context-aware content organization
+- 📁 **Auto-naming**: Files named with type and timestamp
+
+#### 📋 Copy Command Details
+
+The `/copy` command offers quick clipboard operations:
+
+| Copy Option | Description | Use Case |
+|-------------|-------------|----------|
+| **Last Q&A exchange** | Previous question and answer pair | Quick sharing of solutions |
+| **Largest code block** | Biggest code snippet from response | Copying code for implementation |
+
+**Features:**
+- ⚡ **Instant access**: Direct clipboard integration
+- 🧠 **Smart detection**: Automatically finds code blocks
+- 🔍 **Context preservation**: Maintains question-answer relationships
 
 ## ⚙️ Configuration
 
@@ -193,10 +371,42 @@ GPT-4 Mini: Based on the Wikipedia content and recent breakthroughs...
 
 > 💡 **Tip:** Use `/config` to modify these settings interactively.
 
+### 📚 Library Settings
+
+| Option           | Description               | Default | Range      |
+| ---------------- | ------------------------- | ------- | ---------- |
+| `Enabled`        | Enable library system     | true    | true/false |
+| `Directories`    | List of library paths     | []      | Array of paths |
+
 ### 📁 Configuration Files
 
 - **Windows:** `%APPDATA%\duckduckgo-chat-cli\config.json`
 - **Linux/macOS:** `~/.config/duckduckgo-chat-cli/config.json`
+
+### 🛠️ Configuration Structure
+
+```json
+{
+  "tos_accepted": true,
+  "default_model": "gpt-4o-mini",
+  "export_dir": "~/Documents/duckchat",
+  "show_menu": true,
+  "global_prompt": "",
+  "search": {
+    "max_results": 10,
+    "include_snippet": true,
+    "max_retries": 3,
+    "retry_delay": 1
+  },
+  "library": {
+    "enabled": true,
+    "directories": [
+      "/path/to/docs",
+      "/path/to/projects"
+    ]
+  }
+}
+```
 
 ## 📤 Export Features
 
@@ -264,7 +474,7 @@ This project uses GitHub Actions for automated building and releasing:
 
 ### 📚 Development Documentation
 
-- **[CI/CD & Release Process](.github/README.md)** - Complete GitHub Actions documentation
+- **[🔧 CI/CD & Release Process](.github/README.md)** - Complete GitHub Actions documentation
 - **[🔬 Reverse Engineering](REVERSE_ENGINEERING_COMPLETE.md)** - Technical implementation details
 
 ## 🚨 Troubleshooting

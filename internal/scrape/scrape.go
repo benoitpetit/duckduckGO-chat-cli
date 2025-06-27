@@ -1,53 +1,53 @@
 package scrape
 
 import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "regexp"
-    "strings"
-    "time"
-    "log"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"regexp"
+	"strings"
+	"time"
 
-    "github.com/chromedp/chromedp"
+	"github.com/chromedp/chromedp"
 )
 
 type WebContentResult struct {
-    URL     string `json:"url"`
-    Content string `json:"content"`
+	URL     string `json:"url"`
+	Content string `json:"content"`
 }
 
 func WebContent(url string) (*WebContentResult, error) {
-    ctx, cancel := chromedp.NewContext(context.Background())
-    defer cancel()
-    ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
-    defer cancel()
+	ctx, cancel := chromedp.NewContext(context.Background())
+	defer cancel()
+	ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 
-    var content string
-    err := chromedp.Run(ctx,
-        chromedp.Navigate(url),
-        chromedp.Sleep(2*time.Second),
-        chromedp.Evaluate(extractionScript, &content),
-    )
-    if err != nil {
-        log.Printf("Error fetching content for URL %s: %v\n", url, err)
-        return nil, err
-    }
+	var content string
+	err := chromedp.Run(ctx,
+		chromedp.Navigate(url),
+		chromedp.Sleep(2*time.Second),
+		chromedp.Evaluate(extractionScript, &content),
+	)
+	if err != nil {
+		log.Printf("Error fetching content for URL %s: %v\n", url, err)
+		return nil, err
+	}
 
-    cleaned := cleanContent(content)
-    result := &WebContentResult{
-        URL:     url,
-        Content: cleaned,
-    }
-    return result, nil
+	cleaned := cleanContent(content)
+	result := &WebContentResult{
+		URL:     url,
+		Content: cleaned,
+	}
+	return result, nil
 }
 
 func (wcr *WebContentResult) ToJSON() (string, error) {
-    jsonData, err := json.MarshalIndent(wcr, "", "  ")
-    if err != nil {
-        return "", fmt.Errorf("error marshalling JSON: %v", err)
-    }
-    return string(jsonData), nil
+	jsonData, err := json.MarshalIndent(wcr, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("error marshalling JSON: %v", err)
+	}
+	return string(jsonData), nil
 }
 
 const extractionScript = `(function() {
@@ -56,7 +56,7 @@ const extractionScript = `(function() {
 })()`
 
 func cleanContent(text string) string {
-    cleaned := regexp.MustCompile(`\s+`).ReplaceAllString(text, " ")
-    cleaned = strings.TrimSpace(cleaned)
-    return cleaned
+	cleaned := regexp.MustCompile(`\s+`).ReplaceAllString(text, " ")
+	cleaned = strings.TrimSpace(cleaned)
+	return cleaned
 }

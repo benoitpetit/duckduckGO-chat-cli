@@ -102,14 +102,7 @@ func performSearch(query string, maxResults int) ([]SearchResult, error) {
 		searchResults := make([]SearchResult, 0, len(results))
 		for _, r := range results {
 			if r.Title != "" && r.FormattedUrl != "" {
-				searchResults = append(searchResults, SearchResult{
-					Title:            r.Title,
-					FormattedUrl:     r.FormattedUrl,
-					Snippet:          r.Snippet,
-					HtmlTitle:        r.HtmlTitle,
-					HtmlFormattedUrl: r.HtmlFormattedUrl,
-					HtmlSnippet:      r.HtmlSnippet,
-				})
+				searchResults = append(searchResults, SearchResult(r))
 			}
 		}
 

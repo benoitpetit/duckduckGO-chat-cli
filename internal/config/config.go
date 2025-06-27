@@ -24,14 +24,20 @@ type SearchConfig struct {
 	RetryDelay     int  `json:"retry_delay"`
 }
 
+type LibraryConfig struct {
+	Directories []string `json:"directories"`
+	Enabled     bool     `json:"enabled"`
+}
+
 type Config struct {
-	TOSAccepted    bool         `json:"tos_accepted"`
-	DefaultModel   string       `json:"default_model"`
-	ExportDir      string       `json:"export_dir"`
-	LastUpdateTime time.Time    `json:"last_update_time"`
-	Search         SearchConfig `json:"search"`
-	ShowMenu       bool         `json:"show_menu"`
-	GlobalPrompt   string       `json:"global_prompt"`
+	TOSAccepted    bool          `json:"tos_accepted"`
+	DefaultModel   string        `json:"default_model"`
+	ExportDir      string        `json:"export_dir"`
+	LastUpdateTime time.Time     `json:"last_update_time"`
+	Search         SearchConfig  `json:"search"`
+	Library        LibraryConfig `json:"library"`
+	ShowMenu       bool          `json:"show_menu"`
+	GlobalPrompt   string        `json:"global_prompt"`
 }
 
 func Initialize() *Config {
@@ -49,6 +55,14 @@ func Initialize() *Config {
 		cfg.Search.RetryDelay = 1
 	}
 	cfg.Search.IncludeSnippet = true // default to true
+
+	// Initialize library config with defaults
+	if len(cfg.Library.Directories) == 0 {
+		cfg.Library.Directories = []string{}
+	}
+	if !cfg.Library.Enabled {
+		cfg.Library.Enabled = true // default to enabled
+	}
 
 	if err := ensureExportDir(cfg); err != nil {
 		color.Yellow("Warning: Failed to create export directory: %v", err)
@@ -155,11 +169,12 @@ func HandleConfiguration(cfg *Config, chatSession interfaces.ChatSession) {
 		color.White("3. Search Settings")
 		color.White("4. Show Commands Menu: %v", cfg.ShowMenu)
 		color.White("5. Global Prompt")
-		color.White("6. Back to chat")
+		color.White("6. Library Settings")
+		color.White("7. Back to chat")
 
 		// read user input
 		reader := bufio.NewReader(os.Stdin)
-		color.Blue("\nEnter your choice (1-6): ")
+		color.Blue("\nEnter your choice (1-7): ")
 		choice := readInput(reader)
 
 		switch choice {
@@ -173,7 +188,9 @@ func HandleConfiguration(cfg *Config, chatSession interfaces.ChatSession) {
 			handleShowMenuChange(cfg)
 		case "5":
 			handleGlobalPromptChange(cfg)
-		case "6", "":
+		case "6":
+			handleLibrarySettings(cfg)
+		case "7", "":
 			return
 		default:
 			color.Red("Invalid choice. Please try again.")
@@ -354,5 +371,110 @@ func handleGlobalPromptChange(cfg *Config) {
 	cfg.GlobalPrompt = prompt
 	if err := saveConfig(cfg); err != nil {
 		color.Red("Error saving config: %v", err)
+	}
+}
+
+func handleLibrarySettings(cfg *Config) {
+	for {
+		color.Yellow("\nLibrary Settings:")
+		color.White("Current settings:")
+		color.White("Enabled: %v", cfg.Library.Enabled)
+		color.White("Directories (%d):", len(cfg.Library.Directories))
+		for i, dir := range cfg.Library.Directories {
+			color.White("  %d. %s", i+1, dir)
+		}
+		color.White("\nOptions:")
+		color.White("1. Toggle library (enabled: %v)", cfg.Library.Enabled)
+		color.White("2. Add directory")
+		color.White("3. Remove directory")
+		color.White("4. Clear all directories")
+		color.White("5. Back")
+
+		reader := bufio.NewReader(os.Stdin)
+		color.Blue("\nEnter your choice (1-5): ")
+		choice := readInput(reader)
+
+		switch choice {
+		case "1":
+			cfg.Library.Enabled = !cfg.Library.Enabled
+			if err := saveConfig(cfg); err != nil {
+				color.Red("Error saving config: %v", err)
+				return
+			}
+			if cfg.Library.Enabled {
+				color.Green("✅ Library enabled")
+			} else {
+				color.Yellow("⚠️ Library disabled")
+			}
+
+		case "2":
+			color.Blue("Enter directory path: ")
+			path := readInput(reader)
+			if path != "" {
+				// Check if directory exists
+				if info, err := os.Stat(path); err == nil && info.IsDir() {
+					// Check if already exists
+					exists := false
+					for _, existing := range cfg.Library.Directories {
+						if existing == path {
+							exists = true
+							break
+						}
+					}
+					if !exists {
+						cfg.Library.Directories = append(cfg.Library.Directories, path)
+						if err := saveConfig(cfg); err != nil {
+							color.Red("Error saving config: %v", err)
+							return
+						}
+						color.Green("✅ Directory added: %s", path)
+					} else {
+						color.Yellow("⚠️ Directory already exists in library")
+					}
+				} else {
+					color.Red("❌ Directory does not exist or is not accessible: %s", path)
+				}
+			}
+
+		case "3":
+			if len(cfg.Library.Directories) == 0 {
+				color.Yellow("No directories to remove")
+				continue
+			}
+			color.Yellow("Select directory to remove:")
+			for i, dir := range cfg.Library.Directories {
+				color.White("%d. %s", i+1, dir)
+			}
+			color.Blue("Enter directory number: ")
+			if num, err := strconv.Atoi(readInput(reader)); err == nil && num > 0 && num <= len(cfg.Library.Directories) {
+				removed := cfg.Library.Directories[num-1]
+				cfg.Library.Directories = append(cfg.Library.Directories[:num-1], cfg.Library.Directories[num:]...)
+				if err := saveConfig(cfg); err != nil {
+					color.Red("Error saving config: %v", err)
+					return
+				}
+				color.Green("✅ Directory removed: %s", removed)
+			} else {
+				color.Red("❌ Invalid directory number")
+			}
+
+		case "4":
+			if len(cfg.Library.Directories) > 0 {
+				cfg.Library.Directories = []string{}
+				if err := saveConfig(cfg); err != nil {
+					color.Red("Error saving config: %v", err)
+					return
+				}
+				color.Green("✅ All directories cleared")
+			} else {
+				color.Yellow("No directories to clear")
+			}
+
+		case "5":
+			return
+
+		default:
+			color.Red("❌ Invalid choice")
+		}
 	}
 }

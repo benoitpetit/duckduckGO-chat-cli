@@ -105,8 +105,12 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, input string) {
 		chat.HandleSearchCommand(chatSession, input, cfg)
 	case strings.HasPrefix(input, "/file "):
 		chat.HandleFileCommand(chatSession, input, cfg)
+	case strings.HasPrefix(input, "/library"):
+		chat.HandleLibraryCommand(chatSession, input, cfg)
 	case strings.HasPrefix(input, "/url "):
 		chat.HandleURLCommand(chatSession, input, cfg)
+	case strings.HasPrefix(input, "/pmp"):
+		chat.HandlePMPCommand(chatSession, input, cfg)
 	case input == "/export":
 		chat.HandleExportCommand(chatSession, cfg)
 	case input == "/copy":
