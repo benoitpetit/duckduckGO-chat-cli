@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"bufio"
 	"duckduckgo-chat-cli/internal/config"
 	"fmt"
 	"os"
@@ -10,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/fatih/color"
 )
 
@@ -114,16 +114,17 @@ func isPMPInstalled() bool {
 
 // offerPMPInstallation asks the user if they want to install PMP
 func offerPMPInstallation() bool {
-	color.Blue("Would you like to install PMP automatically? (y/n): ")
-
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		return false
+	var install bool
+	prompt := &survey.Confirm{
+		Message: "PMP (Prompt My Project) is not installed. Would you like to install it automatically?",
+		Help:    "PMP is a tool to generate structured prompts from your source code.",
+		Default: true,
 	}
-
-	response := strings.ToLower(strings.TrimSpace(input))
-	return response == "y" || response == "yes"
+	err := survey.AskOne(prompt, &install, survey.WithStdio(os.Stdin, os.Stdout, os.Stderr))
+	if err != nil {
+		return false // Default to no on any error
+	}
+	return install
 }
 
 // installPMP attempts to install PMP using the appropriate method for the OS

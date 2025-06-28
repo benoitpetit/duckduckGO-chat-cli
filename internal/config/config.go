@@ -1,7 +1,6 @@
 package config
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,8 +12,9 @@ import (
 
 	"duckduckgo-chat-cli/internal/interfaces"
 	"duckduckgo-chat-cli/internal/models"
+	"duckduckgo-chat-cli/internal/ui"
 
-	"github.com/fatih/color"
+	"github.com/AlecAivazis/survey/v2"
 )
 
 type SearchConfig struct {
@@ -29,6 +29,13 @@ type LibraryConfig struct {
 	Enabled     bool     `json:"enabled"`
 }
 
+type APIConfig struct {
+	Enabled     bool `json:"enabled"`
+	Port        int  `json:"port"`
+	Autostart   bool `json:"autostart"`
+	LogRequests bool `json:"log_requests"`
+}
+
 type Config struct {
 	TOSAccepted    bool          `json:"tos_accepted"`
 	DefaultModel   string        `json:"default_model"`
@@ -36,6 +43,7 @@ type Config struct {
 	LastUpdateTime time.Time     `json:"last_update_time"`
 	Search         SearchConfig  `json:"search"`
 	Library        LibraryConfig `json:"library"`
+	API            APIConfig     `json:"api"`
 	ShowMenu       bool          `json:"show_menu"`
 	GlobalPrompt   string        `json:"global_prompt"`
 }
@@ -64,8 +72,14 @@ func Initialize() *Config {
 		cfg.Library.Enabled = true // default to enabled
 	}
 
+	// Initialize API config with defaults
+	if cfg.API.Port == 0 {
+		cfg.API.Port = 8080 // default port
+	}
+	cfg.API.LogRequests = true // default to true
+
 	if err := ensureExportDir(cfg); err != nil {
-		color.Yellow("Warning: Failed to create export directory: %v", err)
+		ui.Warningln("Warning: Failed to create export directory: %v", err)
 	}
 	return cfg
 }
@@ -80,7 +94,7 @@ func loadConfig() *Config {
 
 	if data, err := os.ReadFile(configPath()); err == nil {
 		if err := json.Unmarshal(data, cfg); err != nil {
-			color.Yellow("Warning: Failed to parse config file: %v", err)
+			ui.Warningln("Warning: Failed to parse config file: %v", err)
 		}
 	}
 	return cfg
@@ -139,21 +153,17 @@ func AcceptTermsOfService(cfg *Config) bool {
 		return true
 	}
 
-	color.Yellow("Please accept the terms of service")
-	color.Blue("Do you accept? (yes/no): ")
-
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		color.Red("Error reading input: %v", err)
-		return false
+	var accepted bool
+	prompt := &survey.Confirm{
+		Message: "Please accept the terms of service to continue. Do you accept?",
+		Default: true,
 	}
-	accepted := strings.ToLower(strings.TrimSpace(input)) == "yes"
+	survey.AskOne(prompt, &accepted)
 
 	if accepted {
 		cfg.TOSAccepted = true
 		if err := saveConfig(cfg); err != nil {
-			color.Yellow("Warning: Failed to save config: %v", err)
+			ui.Warningln("Warning: Failed to save config: %v", err)
 		}
 	}
 	return accepted
@@ -161,320 +171,247 @@ func AcceptTermsOfService(cfg *Config) bool {
 
 func HandleConfiguration(cfg *Config, chatSession interfaces.ChatSession) {
 	for {
-		// show configuration menu
-		color.Yellow("\nDuckDuckGo Chat CLI Configuration")
-		color.White("Current settings:")
-		color.White("1. Default Model: %s", cfg.DefaultModel)
-		color.White("2. Export Directory: %s", cfg.ExportDir)
-		color.White("3. Search Settings")
-		color.White("4. Show Commands Menu: %v", cfg.ShowMenu)
-		color.White("5. Global Prompt")
-		color.White("6. Library Settings")
-		color.White("7. Back to chat")
-
-		// read user input
-		reader := bufio.NewReader(os.Stdin)
-		color.Blue("\nEnter your choice (1-7): ")
-		choice := readInput(reader)
+		choice := ""
+		prompt := &survey.Select{
+			Message: "DuckDuckGo Chat CLI Configuration",
+			Help:    "Current settings are shown as defaults. Choose an option to edit.",
+			Options: []string{
+				"Default Model",
+				"Export Directory",
+				"Search Settings",
+				"Show Commands Menu",
+				"Global Prompt",
+				"Library Settings",
+				"API Settings",
+				"Back to chat",
+			},
+			Default: "Back to chat",
+		}
+		survey.AskOne(prompt, &choice)
 
 		switch choice {
-		case "1":
+		case "Default Model":
 			handleModelChange(cfg, chatSession)
-		case "2":
+		case "Export Directory":
 			handleExportDirChange(cfg)
-		case "3":
+		case "Search Settings":
 			handleSearchSettings(cfg)
-		case "4":
+		case "Show Commands Menu":
 			handleShowMenuChange(cfg)
-		case "5":
+		case "Global Prompt":
 			handleGlobalPromptChange(cfg)
-		case "6":
+		case "Library Settings":
 			handleLibrarySettings(cfg)
-		case "7", "":
+		case "API Settings":
+			handleAPISettings(cfg)
+		case "Back to chat", "":
 			return
 		default:
-			color.Red("Invalid choice. Please try again.")
+			ui.Errorln("Invalid choice. Please try again.")
 		}
 	}
-}
-
-func readInput(reader *bufio.Reader) string {
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		color.Red("Error reading input: %v", err)
-		return ""
-	}
-	return strings.TrimSpace(input)
 }
 
 func handleModelChange(cfg *Config, chatSession interfaces.ChatSession) {
-	color.Yellow("\nChoose Default Model:")
-	color.White("1. GPT-4o mini")
-	color.White("2. Claude 3 Haiku")
-	color.White("3. Llama 3.3 70B")
-	color.White("4. Mistral Small 3")
-	color.White("5. o4-mini")
-
-	reader := bufio.NewReader(os.Stdin)
-	color.Blue("\nEnter your choice (1-5): ")
-	choice := readInput(reader)
-
-	modelMap := map[string]string{
-		"1": "gpt-4o-mini",
-		"2": "claude-3-haiku",
-		"3": "llama",
-		"4": "mixtral",
-		"5": "o4mini",
+	model := ""
+	prompt := &survey.Select{
+		Message: "Choose Default Model:",
+		Options: []string{
+			"gpt-4o-mini",
+			"claude-3-haiku",
+			"llama",
+			"mixtral",
+			"o4mini",
+		},
+		Default: cfg.DefaultModel,
 	}
+	survey.AskOne(prompt, &model)
 
-	if model, ok := modelMap[choice]; ok {
+	if model != "" {
 		cfg.DefaultModel = model
 		if err := saveConfig(cfg); err != nil {
-			color.Red("Error saving config: %v", err)
+			ui.Errorln("Error saving config: %v", err)
 			return
 		}
 		chatSession.ChangeModel(models.GetModel(model))
-		color.Green("Default model updated and applied: %s", model)
+		ui.AIln("Default model updated and applied: %s", model)
 	} else {
-		color.Red("Invalid choice. No changes made.")
+		ui.Errorln("Invalid choice. No changes made.")
 	}
 }
 
 func handleExportDirChange(cfg *Config) {
-	reader := bufio.NewReader(os.Stdin)
-	color.Blue("\nEnter new export directory path (or press Enter for default): ")
-	path := readInput(reader)
+	path := ""
+	prompt := &survey.Input{
+		Message: "Enter new export directory path:",
+		Default: cfg.ExportDir,
+		Help:    "Press Enter to use the default path.",
+	}
+	survey.AskOne(prompt, &path)
 
 	if path == "" {
-		// use default export path
-		userHome, err := os.UserHomeDir()
-		if err == nil {
-			path = filepath.Join(userHome, "Documents", "duckchat")
-		}
+		path = defaultExportPath()
 	}
 
-	if path != "" {
-		if err := os.MkdirAll(path, 0755); err == nil {
-			cfg.ExportDir = path
-			if err := saveConfig(cfg); err != nil {
-				color.Red("Error saving config: %v", err)
-				return
-			}
-			color.Green("Export directory updated to: %s", path)
-		} else {
-			color.Red("Error creating directory: %v", err)
-		}
+	cfg.ExportDir = path
+	if err := ensureExportDir(cfg); err != nil {
+		ui.Errorln("Error creating directory: %v", err)
+	}
+
+	if err := saveConfig(cfg); err != nil {
+		ui.Errorln("Error saving config: %v", err)
+	} else {
+		ui.AIln("Export directory updated to: %s", path)
 	}
 }
 
 func handleSearchSettings(cfg *Config) {
-	color.Yellow("\nSearch Settings:")
-	color.White("Current settings:")
-	color.White("1. Max Results: %d", cfg.Search.MaxResults)
-	color.White("2. Include Snippets: %v", cfg.Search.IncludeSnippet)
-	color.White("3. Max Retries: %d", cfg.Search.MaxRetries)
-	color.White("4. Retry Delay: %d seconds", cfg.Search.RetryDelay)
-	color.White("5. Back")
+	qs := []*survey.Question{
+		{
+			Name:   "max_results",
+			Prompt: &survey.Input{Message: "Max search results:", Default: strconv.Itoa(cfg.Search.MaxResults)},
+		},
+		{
+			Name:   "include_snippet",
+			Prompt: &survey.Confirm{Message: "Include snippets in search results?", Default: cfg.Search.IncludeSnippet},
+		},
+	}
+	answers := struct {
+		MaxResults     string `survey:"max_results"`
+		IncludeSnippet bool   `survey:"include_snippet"`
+	}{}
 
-	reader := bufio.NewReader(os.Stdin)
-	color.Blue("\nEnter your choice (1-5): ")
-	choice := readInput(reader)
-
-	switch choice {
-	case "1":
-		color.Blue("Enter maximum number of results (1-20): ")
-		if max, err := strconv.Atoi(readInput(reader)); err == nil && max > 0 && max <= 20 {
-			cfg.Search.MaxResults = max
-			if err := saveConfig(cfg); err != nil {
-				color.Red("Error saving config: %v", err)
-				return
-			}
-			color.Green("✅ Max results updated to: %d", max)
-		} else {
-			color.Red("❌ Invalid input. Must be between 1 and 20")
-		}
-
-	case "2":
-		cfg.Search.IncludeSnippet = !cfg.Search.IncludeSnippet
-		if err := saveConfig(cfg); err != nil {
-			color.Red("Error saving config: %v", err)
-			return
-		}
-		color.Green("✅ Include snippets set to: %v", cfg.Search.IncludeSnippet)
-		if cfg.Search.IncludeSnippet {
-			color.Yellow("ℹ️ Search results will include descriptions")
-		} else {
-			color.Yellow("ℹ️ Search results will be compact (titles only)")
-		}
-
-	case "3":
-		color.Blue("Enter maximum number of retries (1-5): ")
-		if retries, err := strconv.Atoi(readInput(reader)); err == nil && retries > 0 && retries <= 5 {
-			cfg.Search.MaxRetries = retries
-			if err := saveConfig(cfg); err != nil {
-				color.Red("Error saving config: %v", err)
-				return
-			}
-			color.Green("✅ Max retries updated to: %d", retries)
-		} else {
-			color.Red("❌ Invalid input. Must be between 1 and 5")
-		}
-
-	case "4":
-		color.Blue("Enter retry delay in seconds (1-10): ")
-		if delay, err := strconv.Atoi(readInput(reader)); err == nil && delay > 0 && delay <= 10 {
-			cfg.Search.RetryDelay = delay
-			if err := saveConfig(cfg); err != nil {
-				color.Red("Error saving config: %v", err)
-				return
-			}
-			color.Green("✅ Retry delay updated to: %d seconds", delay)
-		} else {
-			color.Red("❌ Invalid input. Must be between 1 and 10")
-		}
-
-	case "5":
+	err := survey.Ask(qs, &answers)
+	if err != nil {
+		ui.Errorln("Error reading input: %v", err)
 		return
+	}
 
-	default:
-		color.Red("❌ Invalid choice")
+	maxResults, err := strconv.Atoi(answers.MaxResults)
+	if err != nil {
+		ui.Errorln("Invalid number for max results: %v", err)
+	} else {
+		cfg.Search.MaxResults = maxResults
+	}
+	cfg.Search.IncludeSnippet = answers.IncludeSnippet
+
+	if err := saveConfig(cfg); err != nil {
+		ui.Errorln("Error saving config: %v", err)
+	} else {
+		ui.AIln("Search settings updated.")
 	}
 }
 
 func handleShowMenuChange(cfg *Config) {
-	cfg.ShowMenu = !cfg.ShowMenu
-	if err := saveConfig(cfg); err != nil {
-		color.Red("Error saving config: %v", err)
-		return
+	showMenu := false
+	prompt := &survey.Confirm{
+		Message: "Show commands menu on startup?",
+		Default: cfg.ShowMenu,
 	}
-	color.Green("Show commands menu updated to: %v", cfg.ShowMenu)
+	survey.AskOne(prompt, &showMenu)
+	cfg.ShowMenu = showMenu
+	if err := saveConfig(cfg); err != nil {
+		ui.Errorln("Error saving config: %v", err)
+	} else {
+		ui.AIln("Show menu preference updated.")
+	}
 }
 
 func handleGlobalPromptChange(cfg *Config) {
-	color.Yellow("\nGlobal Prompt:")
-	if cfg.GlobalPrompt != "" {
-		color.White("Current prompt: %s", cfg.GlobalPrompt)
-	} else {
-		color.White("No global prompt set")
+	prompt := ""
+	p := &survey.Input{
+		Message: "Enter global prompt (or leave empty to clear):",
+		Default: cfg.GlobalPrompt,
 	}
-
-	reader := bufio.NewReader(os.Stdin)
-	color.Blue("\nEnter new global prompt (or leave empty to disable):\n")
-	prompt := readInput(reader)
-
-	if prompt == "" {
-		color.Yellow("Global prompt disabled")
-	} else {
-		color.Green("Global prompt set to: %s", prompt)
-	}
-
+	survey.AskOne(p, &prompt)
 	cfg.GlobalPrompt = prompt
 	if err := saveConfig(cfg); err != nil {
-		color.Red("Error saving config: %v", err)
+		ui.Errorln("Error saving config: %v", err)
+	} else {
+		ui.AIln("Global prompt updated.")
 	}
 }
 
 func handleLibrarySettings(cfg *Config) {
+	choice := ""
+	prompt := &survey.Select{
+		Message: "Library Settings",
+		Options: []string{
+			fmt.Sprintf("Enabled (%t)", cfg.Library.Enabled),
+			"Manage Directories",
+			"Back",
+		},
+		Default: "Back",
+	}
+	survey.AskOne(prompt, &choice)
+
+	switch {
+	case strings.HasPrefix(choice, "Enabled"):
+		cfg.Library.Enabled = !cfg.Library.Enabled
+		if err := saveConfig(cfg); err != nil {
+			ui.Errorln("Error saving config: %v", err)
+		} else {
+			ui.AIln("Library system set to: %t", cfg.Library.Enabled)
+		}
+	case choice == "Manage Directories":
+		ui.Warningln("Directory management is handled via /library add and /library remove commands.")
+	}
+}
+
+func handleAPISettings(cfg *Config) {
 	for {
-		color.Yellow("\nLibrary Settings:")
-		color.White("Current settings:")
-		color.White("Enabled: %v", cfg.Library.Enabled)
-		color.White("Directories (%d):", len(cfg.Library.Directories))
-		for i, dir := range cfg.Library.Directories {
-			color.White("  %d. %s", i+1, dir)
+		choice := ""
+		prompt := &survey.Select{
+			Message: "API Settings",
+			Options: []string{
+				fmt.Sprintf("Enabled (%t)", cfg.API.Enabled),
+				fmt.Sprintf("Port (%d)", cfg.API.Port),
+				fmt.Sprintf("Autostart on launch (%t)", cfg.API.Autostart),
+				fmt.Sprintf("Log API Requests (%t)", cfg.API.LogRequests),
+				"Back",
+			},
+			Default: "Back",
 		}
-		color.White("\nOptions:")
-		color.White("1. Toggle library (enabled: %v)", cfg.Library.Enabled)
-		color.White("2. Add directory")
-		color.White("3. Remove directory")
-		color.White("4. Clear all directories")
-		color.White("5. Back")
+		survey.AskOne(prompt, &choice)
 
-		reader := bufio.NewReader(os.Stdin)
-		color.Blue("\nEnter your choice (1-5): ")
-		choice := readInput(reader)
-
-		switch choice {
-		case "1":
-			cfg.Library.Enabled = !cfg.Library.Enabled
-			if err := saveConfig(cfg); err != nil {
-				color.Red("Error saving config: %v", err)
-				return
-			}
-			if cfg.Library.Enabled {
-				color.Green("✅ Library enabled")
-			} else {
-				color.Yellow("⚠️ Library disabled")
-			}
-
-		case "2":
-			color.Blue("Enter directory path: ")
-			path := readInput(reader)
-			if path != "" {
-				// Check if directory exists
-				if info, err := os.Stat(path); err == nil && info.IsDir() {
-					// Check if already exists
-					exists := false
-					for _, existing := range cfg.Library.Directories {
-						if existing == path {
-							exists = true
-							break
-						}
-					}
-					if !exists {
-						cfg.Library.Directories = append(cfg.Library.Directories, path)
-						if err := saveConfig(cfg); err != nil {
-							color.Red("Error saving config: %v", err)
-							return
-						}
-						color.Green("✅ Directory added: %s", path)
-					} else {
-						color.Yellow("⚠️ Directory already exists in library")
-					}
-				} else {
-					color.Red("❌ Directory does not exist or is not accessible: %s", path)
-				}
-			}
-
-		case "3":
-			if len(cfg.Library.Directories) == 0 {
-				color.Yellow("No directories to remove")
-				continue
-			}
-			color.Yellow("Select directory to remove:")
-			for i, dir := range cfg.Library.Directories {
-				color.White("%d. %s", i+1, dir)
-			}
-			color.Blue("Enter directory number: ")
-			if num, err := strconv.Atoi(readInput(reader)); err == nil && num > 0 && num <= len(cfg.Library.Directories) {
-				removed := cfg.Library.Directories[num-1]
-				cfg.Library.Directories = append(cfg.Library.Directories[:num-1], cfg.Library.Directories[num:]...)
-				if err := saveConfig(cfg); err != nil {
-					color.Red("Error saving config: %v", err)
-					return
-				}
-				color.Green("✅ Directory removed: %s", removed)
-			} else {
-				color.Red("❌ Invalid directory number")
-			}
-
-		case "4":
-			if len(cfg.Library.Directories) > 0 {
-				cfg.Library.Directories = []string{}
-				if err := saveConfig(cfg); err != nil {
-					color.Red("Error saving config: %v", err)
-					return
-				}
-				color.Green("✅ All directories cleared")
-			} else {
-				color.Yellow("No directories to clear")
-			}
-
-		case "5":
+		switch {
+		case strings.HasPrefix(choice, "Enabled"):
+			cfg.API.Enabled = !cfg.API.Enabled
+			saveAndReport(cfg, fmt.Sprintf("API Enabled status set to: %t", cfg.API.Enabled))
+		case strings.HasPrefix(choice, "Port"):
+			handleAPIPortChange(cfg)
+		case strings.HasPrefix(choice, "Autostart"):
+			cfg.API.Autostart = !cfg.API.Autostart
+			saveAndReport(cfg, fmt.Sprintf("API Autostart set to: %t", cfg.API.Autostart))
+		case strings.HasPrefix(choice, "Log API Requests"):
+			cfg.API.LogRequests = !cfg.API.LogRequests
+			saveAndReport(cfg, fmt.Sprintf("API Request Logging set to: %t", cfg.API.LogRequests))
+		case choice == "Back":
 			return
-
-		default:
-			color.Red("❌ Invalid choice")
 		}
+	}
+}
+
+func handleAPIPortChange(cfg *Config) {
+	portStr := ""
+	prompt := &survey.Input{
+		Message: "Enter API Port:",
+		Default: strconv.Itoa(cfg.API.Port),
+	}
+	survey.AskOne(prompt, &portStr)
+
+	if port, err := strconv.Atoi(portStr); err == nil {
+		cfg.API.Port = port
+		saveAndReport(cfg, fmt.Sprintf("API Port updated to: %d", port))
+	} else {
+		ui.Errorln("Invalid port number. No changes made.")
+	}
+}
+
+func saveAndReport(cfg *Config, message string) {
+	if err := saveConfig(cfg); err != nil {
+		ui.Errorln("Error saving config: %v", err)
+	} else {
+		ui.AIln(message)
 	}
 }

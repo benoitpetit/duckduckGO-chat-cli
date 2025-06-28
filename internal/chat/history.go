@@ -17,26 +17,28 @@ func PrintHistory(c *Chat) {
 	dimWhite := color.New(color.FgHiWhite, color.Faint)
 	dimBlue := color.New(color.FgBlue, color.Faint)
 	dimGreen := color.New(color.FgHiGreen, color.Faint)
+	dimYellow := color.New(color.FgYellow, color.Faint)
 
 	// add a newline before printing the history
 	fmt.Println()
 	for i, msg := range c.Messages {
-		// Skip the first message if it contains a GlobalPrompt
-		if i == 0 && msg.Role == "user" && strings.Contains(msg.Content, "\n\n") {
-			// Extract the visible part of the message (after GlobalPrompt)
-			parts := strings.SplitN(msg.Content, "\n\n", 2)
-			if len(parts) == 2 {
-				dimBlue.Print("You: ")
-				dimWhite.Println(parts[1])
-				continue
-			}
-		}
-
-		if msg.Role == "user" {
+		switch {
+		case strings.HasPrefix(msg.Content, "[Search Context]"):
+			dimYellow.Print("🔍 Search Context: ")
+			dimWhite.Println(strings.TrimSpace(strings.TrimPrefix(msg.Content, "[Search Context]")))
+		case strings.HasPrefix(msg.Content, "[File Context]"):
+			dimYellow.Print("📄 File Context: ")
+			dimWhite.Println(strings.TrimSpace(strings.TrimPrefix(msg.Content, "[File Context]")))
+		case strings.HasPrefix(msg.Content, "[URL Context]"):
+			dimYellow.Print("🌐 URL Context: ")
+			dimWhite.Println(strings.TrimSpace(strings.TrimPrefix(msg.Content, "[URL Context]")))
+		case msg.Role == "user":
 			dimBlue.Print("You: ")
 			dimWhite.Println(msg.Content)
-		} else {
+		case msg.Role == "assistant":
 			dimGreen.Print("\nAI: ")
+			dimWhite.Println(msg.Content)
+		default:
 			dimWhite.Println(msg.Content)
 		}
 

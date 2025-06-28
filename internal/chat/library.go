@@ -2,6 +2,7 @@ package chat
 
 import (
 	"duckduckgo-chat-cli/internal/config"
+	"duckduckgo-chat-cli/internal/ui"
 	"fmt"
 	"io/fs"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/fatih/color"
 )
 
@@ -64,65 +66,71 @@ type FileInfo struct {
 
 // HandleLibraryCommand processes the /library command
 func HandleLibraryCommand(c *Chat, input string, cfg *config.Config) {
-	// Parse the command: /library [list|add <path>|remove <name>|search <pattern> [library]|load <library>] [-- <request>]
-	commandInput := strings.TrimPrefix(input, "/library ")
-	commandInput = strings.TrimSpace(commandInput)
-
-	if commandInput == "" || commandInput == "list" {
-		listLibraries(cfg)
-		return
-	}
+	commandInput := strings.TrimSpace(strings.TrimPrefix(input, "/library"))
 
 	var subCommand, argument, userRequest string
 
-	// Check if there's a -- separator for user request
+	// Check for a request payload first
 	if strings.Contains(commandInput, " -- ") {
 		parts := strings.SplitN(commandInput, " -- ", 2)
 		commandInput = strings.TrimSpace(parts[0])
-		if len(parts) > 1 {
-			userRequest = strings.TrimSpace(parts[1])
-		}
+		userRequest = strings.TrimSpace(parts[1])
 	}
 
 	// Parse subcommand and argument
-	parts := strings.SplitN(commandInput, " ", 2)
-	subCommand = parts[0]
+	parts := strings.Fields(commandInput)
+	if len(parts) > 0 {
+		subCommand = parts[0]
+	}
 	if len(parts) > 1 {
-		argument = strings.TrimSpace(parts[1])
+		argument = strings.Join(parts[1:], " ")
+	}
+
+	// If no subcommand is provided, show an interactive menu
+	if subCommand == "" {
+		var err error
+		subCommand, err = selectLibraryAction()
+		if err != nil {
+			ui.Warningln("Library command canceled.")
+			return
+		}
 	}
 
 	switch subCommand {
+	case "list":
+		listLibraries(cfg)
 	case "add":
-		if argument == "" {
-			color.Red("Usage: /library add <directory_path>")
-			return
-		}
 		handleLibraryAdd(cfg, argument)
-
 	case "remove", "rm":
-		if argument == "" {
-			color.Red("Usage: /library remove <library_number_or_name>")
-			return
-		}
-		handleLibraryRemove(cfg, argument)
-
-	case "search":
-		if argument == "" {
-			color.Red("Usage: /library search <pattern> [library_name]")
-			return
-		}
-		handleLibrarySearch(cfg, argument)
-
+		handleLibraryRemove(cfg)
 	case "load":
-		if argument == "" {
-			color.Red("Usage: /library load <library_number_or_name> [-- request]")
-			return
-		}
 		handleLibraryLoad(c, cfg, argument, userRequest)
-
-	default:
+	case "search":
+		handleLibrarySearch(cfg, argument)
+	case "help":
 		showLibraryHelp()
+	default:
+		ui.Errorln("Unknown library command: %s. Use '/library help' for more info.", subCommand)
 	}
+}
+
+// selectLibraryAction presents an interactive menu for library actions.
+func selectLibraryAction() (string, error) {
+	var choice string
+	prompt := &survey.Select{
+		Message: "What would you like to do with your libraries?",
+		Options: []string{
+			"list",
+			"add",
+			"remove",
+			"load",
+			"search",
+			"help",
+		},
+		Default: "list",
+	}
+	err := survey.AskOne(prompt, &choice, survey.WithStdio(os.Stdin, os.Stdout, os.Stderr))
+	return strings.ToLower(choice), err
 }
 
 // showLibraryHelp displays usage information for the library command
@@ -196,6 +204,20 @@ func listLibraries(cfg *config.Config) {
 
 // handleLibraryAdd adds a new directory as a library
 func handleLibraryAdd(cfg *config.Config, path string) {
+	var err error
+	if path == "" {
+		ui.Warningln("No path provided, opening directory browser...")
+		path, err = ui.SelectDirectory()
+		if err != nil {
+			ui.Errorln("Error selecting directory: %v", err)
+			return
+		}
+		if path == "" {
+			ui.Warningln("No directory selected.")
+			return
+		}
+	}
+
 	// Expand tilde and resolve path
 	if strings.HasPrefix(path, "~/") {
 		if home, err := os.UserHomeDir(); err == nil {
@@ -234,50 +256,51 @@ func handleLibraryAdd(cfg *config.Config, path string) {
 }
 
 // handleLibraryRemove removes a library from configuration
-func handleLibraryRemove(cfg *config.Config, argument string) {
+func handleLibraryRemove(cfg *config.Config) {
 	if len(cfg.Library.Directories) == 0 {
-		color.Yellow("No libraries to remove")
+		ui.Warningln("No libraries to remove")
 		return
 	}
 
-	var indexToRemove int = -1
+	// Interactive mode
+	var toRemove []string
+	prompt := &survey.MultiSelect{
+		Message: "Select libraries to remove (use space to select):",
+		Options: cfg.Library.Directories,
+	}
+	err := survey.AskOne(prompt, &toRemove, survey.WithStdio(os.Stdin, os.Stdout, os.Stderr))
+	if err != nil {
+		ui.Warningln("\nLibrary removal canceled.")
+		return
+	}
 
-	// Try to parse as number first
-	if num, err := strconv.Atoi(argument); err == nil {
-		if num > 0 && num <= len(cfg.Library.Directories) {
-			indexToRemove = num - 1
-		} else {
-			color.Red("❌ Invalid library number. Use '/library list' to see available libraries")
-			return
-		}
-	} else {
-		// Try to find by name
-		argument = strings.ToLower(argument)
-		for i, dir := range cfg.Library.Directories {
-			if strings.Contains(strings.ToLower(getLibraryName(dir)), argument) {
-				indexToRemove = i
-				break
-			}
-		}
+	if len(toRemove) == 0 {
+		ui.Warningln("No libraries selected for removal.")
+		return
+	}
 
-		if indexToRemove == -1 {
-			color.Red("❌ Library not found: %s", argument)
-			return
+	// Create a map for efficient lookup of directories to remove
+	removalMap := make(map[string]bool)
+	for _, dir := range toRemove {
+		removalMap[dir] = true
+	}
+
+	// Create a new slice containing only the directories to keep
+	var updatedDirs []string
+	for _, dir := range cfg.Library.Directories {
+		if !removalMap[dir] {
+			updatedDirs = append(updatedDirs, dir)
 		}
 	}
 
-	// Remove from configuration
-	removed := cfg.Library.Directories[indexToRemove]
-	cfg.Library.Directories = append(cfg.Library.Directories[:indexToRemove], cfg.Library.Directories[indexToRemove+1:]...)
+	cfg.Library.Directories = updatedDirs
 
 	if err := config.SaveConfig(cfg); err != nil {
-		color.Red("❌ Error saving config: %v", err)
+		ui.Errorln("❌ Error saving config: %v", err)
 		return
 	}
 
-	color.Green("✅ Library removed: %s", getLibraryName(removed))
-	color.White("   Path: %s", removed)
-	color.Yellow("   (Files were not deleted, only removed from library list)")
+	ui.AIln("✅ Successfully removed %d libraries.", len(toRemove))
 }
 
 // handleLibrarySearch searches for files in libraries
@@ -378,132 +401,101 @@ func handleLibrarySearch(cfg *config.Config, argument string) {
 
 // handleLibraryLoad loads all files from a library into context
 func handleLibraryLoad(c *Chat, cfg *config.Config, argument string, userRequest string) {
-	if !cfg.Library.Enabled {
-		color.Yellow("⚠️ Library system is disabled")
-		return
-	}
-
 	if len(cfg.Library.Directories) == 0 {
-		color.Yellow("⚠️ No libraries configured")
+		ui.Warningln("No libraries configured. Use '/library add <path>' to add one.")
 		return
 	}
 
-	var targetDir string
-
-	// Try to parse as number first
-	if num, err := strconv.Atoi(argument); err == nil {
-		if num > 0 && num <= len(cfg.Library.Directories) {
-			targetDir = cfg.Library.Directories[num-1]
-		} else {
-			color.Red("❌ Invalid library number. Use '/library list' to see available libraries")
-			return
-		}
-	} else {
-		// Try to find by name
-		argument = strings.ToLower(argument)
-		for _, dir := range cfg.Library.Directories {
-			if strings.Contains(strings.ToLower(getLibraryName(dir)), argument) {
-				targetDir = dir
-				break
-			}
-		}
-
-		if targetDir == "" {
-			color.Red("❌ Library not found: %s", argument)
-			return
-		}
-	}
-
-	color.Yellow("📚 Loading library: %s", getLibraryName(targetDir))
-
-	// Collect all files
-	var allFiles []FileInfo
-	var totalSize int64
-
-	err := filepath.WalkDir(targetDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-
-		if !d.IsDir() {
-			ext := strings.ToLower(filepath.Ext(path))
-			if SupportedExtensions[ext] {
-				info, err := d.Info()
-				if err != nil {
-					return nil
-				}
-
-				relPath, _ := filepath.Rel(targetDir, path)
-				fileInfo := FileInfo{
-					Path:    path,
-					Name:    relPath,
-					Size:    info.Size(),
-					ModTime: info.ModTime().Format("2006-01-02 15:04"),
-				}
-				allFiles = append(allFiles, fileInfo)
-				totalSize += info.Size()
-			}
-		}
-		return nil
-	})
-
+	// Select the library first
+	libraryPath, err := selectLibrary(cfg, argument)
 	if err != nil {
-		color.Red("❌ Error reading library: %v", err)
+		ui.Errorln("Error: %v", err)
+		return
+	}
+	if libraryPath == "" {
+		ui.Warningln("No library selected.")
 		return
 	}
 
-	if len(allFiles) == 0 {
-		color.Yellow("⚠️ No supported files found in library")
+	// Now, browse for files within that library
+	files, err := ui.SelectMultipleFiles(libraryPath)
+	if err != nil {
+		ui.Errorln("Error selecting files: %v", err)
+		return
+	}
+	if len(files) == 0 {
+		ui.Warningln("No files selected from the library.")
 		return
 	}
 
-	// Sort files by name
-	sort.Slice(allFiles, func(i, j int) bool {
-		return allFiles[i].Name < allFiles[j].Name
-	})
-
-	color.Yellow("📄 Loading %d files (%s)...", len(allFiles), formatFileSize(totalSize))
-
-	// Add all files to context
-	var contextBuilder strings.Builder
-	contextBuilder.WriteString(fmt.Sprintf("[Library Context: %s]\n", getLibraryName(targetDir)))
-	contextBuilder.WriteString(fmt.Sprintf("Path: %s\n", targetDir))
-	contextBuilder.WriteString(fmt.Sprintf("Files: %d\n\n", len(allFiles)))
-
-	filesAdded := 0
-	for _, file := range allFiles {
-		content, err := os.ReadFile(file.Path)
+	// Add selected files to context
+	var totalChars int
+	for _, file := range files {
+		content, err := os.ReadFile(file)
 		if err != nil {
-			color.Yellow("⚠️ Could not read file: %s (%v)", file.Name, err)
+			ui.Errorln("Failed to read file %s: %v", file, err)
 			continue
 		}
-
-		contextBuilder.WriteString(fmt.Sprintf("=== File: %s ===\n", file.Name))
-		contextBuilder.WriteString(string(content))
-		contextBuilder.WriteString("\n\n")
-		filesAdded++
+		c.Messages = append(c.Messages, Message{
+			Role:    "user",
+			Content: fmt.Sprintf("[File Context]\nFile: %s\n\n%s", file, string(content)),
+		})
+		totalChars += len(content)
 	}
 
-	if filesAdded == 0 {
-		color.Red("❌ No files could be loaded")
-		return
-	}
+	ui.AIln("✅ Added %d files (%d characters) to context.", len(files), totalChars)
 
-	// Add to chat context
-	c.Messages = append(c.Messages, Message{
-		Role:    "user",
-		Content: contextBuilder.String(),
-	})
-
-	color.Green("✅ Successfully loaded %d files from library: %s", filesAdded, getLibraryName(targetDir))
-
-	// If user provided a specific request, process it with the library context
+	// If user provided a specific request, process it
 	if userRequest != "" {
-		color.Cyan("Processing your request about the library...")
+		ui.Systemln("Processing your request about the files...")
 		ProcessInput(c, userRequest, cfg)
 	} else {
-		color.White("Library files added to context. You can now ask questions about them.")
+		ui.Warningln("File contents added to context.")
 	}
+}
+
+// selectLibrary allows the user to choose a library interactively or by name/number.
+func selectLibrary(cfg *config.Config, argument string) (string, error) {
+	if argument != "" {
+		// Try to parse as number first
+		if num, err := strconv.Atoi(argument); err == nil {
+			if num > 0 && num <= len(cfg.Library.Directories) {
+				return cfg.Library.Directories[num-1], nil
+			}
+		}
+		// Try to find by name
+		for _, dir := range cfg.Library.Directories {
+			if strings.Contains(strings.ToLower(getLibraryName(dir)), strings.ToLower(argument)) {
+				return dir, nil
+			}
+		}
+		return "", fmt.Errorf("library not found: %s", argument)
+	}
+
+	// Interactive mode
+	var options []string
+	for _, dir := range cfg.Library.Directories {
+		options = append(options, getLibraryName(dir))
+	}
+
+	var choice string
+	prompt := &survey.Select{
+		Message: "Select a library to load from:",
+		Options: options,
+	}
+	err := survey.AskOne(prompt, &choice, survey.WithStdio(os.Stdin, os.Stdout, os.Stderr))
+	if err != nil {
+		return "", err
+	}
+
+	// Find the path corresponding to the chosen name
+	for _, dir := range cfg.Library.Directories {
+		if getLibraryName(dir) == choice {
+			return dir, nil
+		}
+	}
+
+	return "", fmt.Errorf("selected library not found")
 }
 
 // getLibraryName extracts a readable name from a directory path
