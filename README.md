@@ -41,6 +41,7 @@
 - **🚀 Project analysis** - Generate comprehensive project prompts with PMP auto-installation
 - **💾 Session persistence** - Maintain conversation history across sessions
 - **📚 Library management** - Organize and search through document collections
+- **⛓️ Command Chaining** - Chain multiple commands (e.g., `/url`, `/file`, `/search`) using `&&` to build a combined context before sending a final prompt with `--`.
 
 ### 🛠️ Productivity Tools
 - **📋 Smart clipboard** - Copy responses, code blocks, or full conversations with interactive selection
@@ -48,6 +49,8 @@
 - **📝 History management** - Browse your conversation 
 - **🔍 Content search** - Search within conversations and document libraries
 - **⚙️ Interactive config** - Visual configuration menus for all settings
+- **🎨 Rich formatting** - Colored output with markdown rendering
+- **⚡ Performance** - Efficient memory usage and fast response times
 
 ### 🌐 API Server
 - **🚀 REST API** - Built-in HTTP server for external integrations
@@ -66,8 +69,16 @@
 - **🛠️ PMP Integration** - Auto-install and use Prompt My Project for code analysis
 - **🔄 Dynamic headers** - Automatic browser session management
 - **📱 Cross-platform** - Linux, Windows, macOS support
-- **🎨 Rich formatting** - Colored output with markdown rendering
-- **⚡ Performance** - Efficient memory usage and fast response times
+
+### ⛓️ Command Chaining
+- **🚀 Chain multiple commands** - Execute a series of commands in a single line using `&&`
+- **💡 Context accumulation** - Combine context from files, URLs, and web searches
+- **🗣️ Final prompt** - Use `--` to add a final prompt to the accumulated context for the AI to process
+
+```bash
+# Chain multiple commands to build a rich context before asking a question
+You: /url https://devbyben.fr/about && /search devbyben.fr twitter account && /file ~/Documents/my_notes.md -- Based on all this, write a summary.
+```
 
 ## 🤖 Available Models
 
@@ -129,7 +140,16 @@ cd duckduckGO-chat-cli
 ### 📖 Typical Workflow
 
 <details>
-<summary><strong>🔍 Example 1: Code Analysis</strong></summary>
+<summary><strong>⛓️ Example 1: Command Chaining</strong></summary>
+
+```bash
+# Chain multiple commands to build a rich context before asking a question
+You: /url https://devbyben.fr/about && /search devbyben.fr twitter account && /file ~/Documents/my_notes.md -- Based on all this, write a summary.
+```
+</details>
+
+<details>
+<summary><strong>🔍 Example 2: Code Analysis</strong></summary>
 
 ```bash
 ./duckduckgo-chat-cli_linux_amd64
@@ -161,7 +181,7 @@ Enter your choice: 2
 </details>
 
 <details>
-<summary><strong>🧪 Example 2: Research Assistant</strong></summary>
+<summary><strong>🧪 Example 3: Research Assistant</strong></summary>
 
 ```bash
 You: /url https://en.wikipedia.org/wiki/Quantum_computing -- Summarize the key concepts
@@ -177,7 +197,7 @@ GPT-4 Mini: Based on the Wikipedia content and recent breakthroughs...
 </details>
 
 <details>
-<summary><strong>📦 Example 3: Project Analysis with PMP</strong></summary>
+<summary><strong>📦 Example 4: Project Analysis with PMP</strong></summary>
 
 ```bash
 You: /pmp ./src -i "*.go" -e "test/*" -- analyze this Go codebase and suggest improvements
@@ -198,7 +218,7 @@ Based on the project analysis, here are my suggestions for improvements:
 </details>
 
 <details>
-<summary><strong>📚 Example 4: Library Management Workflow</strong></summary>
+<summary><strong>📚 Example 5: Library Management Workflow</strong></summary>
 
 ```bash
 You: /library add ~/projects/myapp
@@ -257,7 +277,7 @@ Enter your choice (1-5): 1
 | 📁 `/file <path> [-- prompt]`    | `/file src/main.go -- Explain this code`      | Import file content as context and optionally analyze it with a prompt  |
 | 📚 `/library [command] [args]`   | `/library add /path/to/docs` | Manage library directories for bulk file operations |
 | 🌐 `/url <link> [-- prompt]`     | `/url github.com/golang -- Summarize this page` | Add webpage content as context and optionally process it with a prompt  |
-| 📦 `/pmp [path] [options] [-- prompt]` | `/pmp . -i "*.go" -- analyze this codebase` | Generate structured project prompts with automatic PMP installation |
+| 📦 `/pmp [path] [options] [-- prompt]` | `/pmp . -i "*.go" -e "test/*"` | Generate structured project prompts with automatic PMP installation |
 | 📡 `/api [port]`         | `/api` or `/api 8080`    | Start or stop the API server    |
 | 🤖 `/model`          | `/model` or `/model 2`   | Change AI model (interactive)   |
 | 🧹 `/clear`          | `/clear`                 | Reset conversation context      |
