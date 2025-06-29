@@ -45,7 +45,7 @@
 ### 🛠️ Productivity Tools
 - **📋 Smart clipboard** - Copy responses, code blocks, or full conversations with interactive selection
 - **📤 Advanced export** - Save conversations in multiple formats with search-based filtering
-- **📝 History management** - Browse, search, and restore previous conversations with timestamps
+- **📝 History management** - Browse your conversation 
 - **🔍 Content search** - Search within conversations and document libraries
 - **⚙️ Interactive config** - Visual configuration menus for all settings
 
