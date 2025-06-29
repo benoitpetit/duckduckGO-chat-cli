@@ -20,7 +20,9 @@ import (
 	"duckduckgo-chat-cli/internal/config"
 	"duckduckgo-chat-cli/internal/models"
 	"duckduckgo-chat-cli/internal/scrape"
+	"duckduckgo-chat-cli/internal/ui"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/fatih/color"
 )
 
@@ -64,7 +66,7 @@ type ChatPayload struct {
 func InitializeSession(cfg *config.Config) *Chat {
 	model := models.GetModel(cfg.DefaultModel)
 	chat := NewChat(GetVQD(), model)
-	color.Green("Chat initialized with model: %s", model)
+	ui.AIln("Chat initialized with model: %s", model)
 	setTerminalTitle(fmt.Sprintf("DuckDuckGo Chat - %s", model))
 	return chat
 }
@@ -97,14 +99,14 @@ func NewChat(vqd string, model models.Model) *Chat {
 	// Try to get dynamic headers
 	var feSignals, feVersion, vqdHash1 string
 
-	color.Yellow("⌛ Attempting to extract dynamic headers from DuckDuckGo...")
+	ui.Warningln("⌛ Attempting to extract dynamic headers from DuckDuckGo...")
 	if dynamicHeaders, err := ExtractDynamicHeaders(); err == nil {
 		feSignals = dynamicHeaders.FeSignals
 		feVersion = dynamicHeaders.FeVersion
 		vqdHash1 = dynamicHeaders.VqdHash1
-		color.Green("✅ Successfully extracted dynamic headers")
+		ui.AIln("✅ Successfully extracted dynamic headers")
 	} else {
-		color.Yellow("⚠️ Failed to get dynamic headers, falling back to placeholders. Error: %v", err)
+		ui.Warningln("⚠️ Failed to get dynamic headers, falling back to placeholders. Error: %v", err)
 		// Fallback to working static values
 		feSignals = "eyJzdGFydCI6MTc0OTgyNTIxMDQ0MiwiZXZlbnRzIjpbeyJuYW1lIjoic3RhcnROZXdDaGF0IiwiZGVsdGEiOjQxfV0sImVuZCI6NDk2OX0="
 		feVersion = "serp_20250613_085800_ET-cafd73f97f51c983eb30"
@@ -164,7 +166,7 @@ func GetVQD() string {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		color.Red("Error fetching VQD: %v", err)
+		ui.Errorln("Error fetching VQD: %v", err)
 		return ""
 	}
 	defer resp.Body.Close()
@@ -180,9 +182,9 @@ func (c *Chat) Clear(cfg *config.Config) {
 		c.OldVqd = c.NewVqd
 		// Hash will be refreshed on next request if needed
 		c.RetryCount = 0
-		color.Green("Chat history and context cleared")
+		ui.AIln("Chat history and context cleared")
 	} else {
-		color.Yellow("Chat is already empty")
+		ui.Warningln("Chat is already empty")
 	}
 
 	if cfg.ShowMenu {
@@ -209,43 +211,105 @@ func ProcessInput(c *Chat, input string, cfg *config.Config) {
 		return
 	}
 
+	isFirstMessage := len(c.Messages) == 0
+	actualMessage := input
+	if isFirstMessage && cfg.GlobalPrompt != "" {
+		actualMessage = cfg.GlobalPrompt + "\n\n" + input
+	}
+
+	c.Messages = append(c.Messages, Message{
+		Role:    "user",
+		Content: actualMessage,
+	})
+
+	stream, err := c.FetchStream(actualMessage)
+	if err != nil {
+		ui.Errorln("Error: %v", err)
+		return
+	}
+
+	// Use the new stable streaming renderer
+	modelName := shortenModelName(string(c.Model))
+	finalResponse := RenderStream(stream, modelName)
+
+	c.Messages = append(c.Messages, Message{
+		Role:    "assistant",
+		Content: finalResponse,
+	})
+}
+
+// renderStreamToString captures the stream output into a single string.
+func renderStreamToString(stream <-chan string) string {
+	var fullResponse strings.Builder
+	var currentLine strings.Builder
+	inCodeBlock := false
+	var codeBlockLang string
+
+	for chunk := range stream {
+		for _, char := range chunk {
+			currentLine.WriteRune(char)
+			// This is a simplified version of RenderStream.
+			// It doesn't handle complex ANSI and formatting, just captures the text.
+			if char == '\n' {
+				lineStr := currentLine.String()
+				if strings.HasPrefix(lineStr, "```") {
+					if !inCodeBlock {
+						inCodeBlock = true
+						codeBlockLang = strings.TrimSpace(strings.TrimPrefix(lineStr, "```"))
+						fullResponse.WriteString("```" + codeBlockLang + "\n")
+					} else {
+						inCodeBlock = false
+						fullResponse.WriteString("```\n")
+					}
+				} else {
+					fullResponse.WriteString(lineStr)
+				}
+				currentLine.Reset()
+			}
+		}
+	}
+
+	if currentLine.Len() > 0 {
+		fullResponse.WriteString(currentLine.String())
+	}
+
+	return fullResponse.String()
+}
+
+func ProcessInputAndReturn(c *Chat, input string, cfg *config.Config) (string, error) {
+	if strings.TrimSpace(input) == "" {
+		return "", nil
+	}
+
 	// Check if this is the first message and if a GlobalPrompt is defined
 	isFirstMessage := len(c.Messages) == 0
 
 	// If it's the first message, combine GlobalPrompt and user message
 	actualMessage := input
 	if isFirstMessage && cfg.GlobalPrompt != "" {
-		// For the API, send GlobalPrompt and user message together
 		actualMessage = cfg.GlobalPrompt + "\n\n" + input
 	}
 
-	// Add the combined message (or just user message) to send to the API
 	c.Messages = append(c.Messages, Message{
 		Role:    "user",
 		Content: actualMessage,
 	})
 
-	// Send the message and display the response
 	stream, err := c.FetchStream(actualMessage)
 	if err != nil {
-		color.Red("Error: %v", err)
-		return
+		return "", fmt.Errorf("error fetching stream: %w", err)
 	}
 
-	modelName := shortenModelName(string(c.Model))
-	fmt.Print("\033[32m" + modelName + ":\033[0m ")
+	// Capture the entire response from the stream
+	finalResponse := renderStreamToString(stream)
 
-	var responseBuffer strings.Builder
-	for chunk := range stream {
-		fmt.Print(chunk)
-		responseBuffer.WriteString(chunk)
-	}
-	fmt.Print("\n")
-
+	// Add the assistant's response to the message history
 	c.Messages = append(c.Messages, Message{
 		Role:    "assistant",
-		Content: responseBuffer.String(),
+		Content: finalResponse,
 	})
+
+	return finalResponse, nil
 }
 
 func shortenModelName(model string) string {
@@ -254,13 +318,15 @@ func shortenModelName(model string) string {
 		"claude-3-haiku-20240307":                   "claude-3-haiku",
 		"meta-llama/Llama-3.3-70B-Instruct-Turbo":   "llama",
 		"mistralai/Mistral-Small-24B-Instruct-2501": "mixtral",
+		"o4-mini": "o4mini",
 		"o3-mini": "o3mini",
 	}
 
 	if shortName, exists := displayNames[model]; exists {
 		return string(shortName)
 	}
-	return model
+
+	return "unknown"
 }
 
 func (c *Chat) FetchStream(content string) (<-chan string, error) {
@@ -399,13 +465,13 @@ func (c *Chat) Fetch(content string) (*http.Response, error) {
 			// Refresh both VQD and dynamic headers on 418 errors
 			c.NewVqd = GetVQD()
 			if resp.StatusCode == 418 && c.RetryCount == 0 {
-				color.Yellow("🔄 Error 418 detected, refreshing headers...")
+				ui.Warningln("🔄 Error 418 detected, refreshing headers...")
 				c.RefreshDynamicHeaders() // Try refreshing headers on first 418 error
 			}
 
 			if c.NewVqd != "" && c.RetryCount < 3 {
 				c.RetryCount++
-				color.Yellow("Retrying request (attempt %d/3)...", c.RetryCount)
+				ui.Warningln("Retrying request (attempt %d/3)...", c.RetryCount)
 				return c.Fetch(content)
 			}
 		}
@@ -426,19 +492,15 @@ func (c *Chat) AddURLContext(url string) error {
 		url = "https://" + url
 	}
 
-	color.Yellow("⌛ Retrieving webpage content...")
+	ui.Warningln("⌛ Retrieving webpage content...")
 	content, err := scrape.WebContent(url)
 	if err != nil {
-		return fmt.Errorf("failed to scrape URL: %v", err)
-	}
-
-	if content == nil || content.Content == "" {
-		return fmt.Errorf("no content found at URL: %s", url)
+		return err
 	}
 
 	contentLength := len(content.Content)
 	if contentLength > 500 {
-		color.Cyan("Retrieved %d characters of content", contentLength)
+		ui.AIln("Retrieved %d characters of content", contentLength)
 	}
 
 	c.Messages = append(c.Messages, Message{
@@ -450,154 +512,187 @@ func (c *Chat) AddURLContext(url string) error {
 }
 
 func PrintCommands() {
-	color.Yellow("Type /help to show these commands again")
+	ui.Warningln("Type /help to show these commands again")
+}
+
+// CommandHelp holds information about a CLI command for the help message.
+type CommandHelp struct {
+	Command     string
+	Description string
 }
 
 func PrintWelcomeMessage() {
-	color.Yellow("Special commands:")
-	color.White("/search <query> [-- request] - Search and add context, optionally make a request about results")
-	color.White("/file <path> [-- request] - Add file content and optionally make a request about it")
-	color.White("/library [list|add <path>|remove <n>|search <pattern>|load <lib>] - Manage library directories")
-	color.White("/url <url> [-- request] - Add webpage content and optionally make a request about it")
-	color.White("/pmp [path] [options] [-- request] - Generate structured project prompts with PMP")
-	color.White("/clear - Clear context")
-	color.White("/history - Show history")
-	color.White("/export - Export messages")
-	color.White("/copy - Copy to clipboard")
-	color.White("/config - Configure settings")
-	color.White("/model - Change AI model")
-	color.White("/version - Show version info")
-	color.White("/help - Show this menu")
-	color.White("/exit - Quit")
+	ui.Systemln("\nDuckDuckGo AI Chat CLI - Help")
+	ui.Mutedln("---------------------------------")
+
+	coreCommands := []CommandHelp{
+		{"/help", "Show this help message"},
+		{"/exit", "Exit the application"},
+		{"/clear", "Clear the current chat session and context"},
+		{"/history", "Display the conversation history"},
+		{"/model", "Change the AI model interactively"},
+		{"/config", "Open the interactive configuration menu"},
+		{"/copy", "Copy the last AI response to the clipboard"},
+		{"/export", "Export the conversation to a file"},
+		{"/version", "Show application version information"},
+		{"/api", "Start or stop the API server interactively"},
+	}
+
+	contextCommands := []CommandHelp{
+		{"/search <query>", "Search the web and add results to context"},
+		{"/file <path>", "Add the content of a local file to context"},
+		{"/url <url>", "Add the content of a webpage to context"},
+		{"/library", "Manage and use your local document library"},
+		{"/pmp", "Use Pre-Made Prompts for structured generation"},
+	}
+
+	apiCommands := []CommandHelp{
+		{"GET /", "Shows API documentation"},
+		{"POST /chat", "Sends a message to the chat"},
+		{"GET /history", "Retrieves the chat session history"},
+	}
+
+	ui.AIln("\nCore Commands:")
+	printCommandsTable(coreCommands)
+
+	ui.AIln("\nContext Commands:")
+	printCommandsTable(contextCommands)
+
+	ui.AIln("\nAPI Documentation:")
+	printCommandsTable(apiCommands)
+
+	ui.Warningln("\nNote: You can add '-- <your request>' after /search, /file, or /url to make an immediate request about the context.")
+}
+
+// printCommandsTable formats and prints a list of commands.
+func printCommandsTable(commands []CommandHelp) {
+	// Find the longest command to align descriptions
+	maxLength := 0
+	for _, cmd := range commands {
+		if len(cmd.Command) > maxLength {
+			maxLength = len(cmd.Command)
+		}
+	}
+
+	for _, cmd := range commands {
+		// Use UserColor for the command and default white for the description
+		ui.UserColor.Printf("  %-*s", maxLength+4, cmd.Command)
+		ui.Whiteln("- %s", cmd.Description)
+	}
 }
 
 func HandleURLCommand(c *Chat, input string, cfg *config.Config) {
-	// Parse the command: /url <URL> -- <request>
 	commandInput := strings.TrimPrefix(input, "/url ")
+	parts := strings.SplitN(commandInput, " -- ", 2)
+	url := strings.TrimSpace(parts[0])
+	userRequest := ""
 
-	var url, userRequest string
-
-	// Check if there's a -- separator
-	if strings.Contains(commandInput, " -- ") {
-		parts := strings.SplitN(commandInput, " -- ", 2)
-		url = strings.TrimSpace(parts[0])
-		if len(parts) > 1 {
-			userRequest = strings.TrimSpace(parts[1])
-		}
-	} else {
-		// Fallback: if no --, treat everything as URL for backward compatibility
-		url = strings.TrimSpace(commandInput)
+	if len(parts) > 1 {
+		userRequest = strings.TrimPrefix(parts[1], "request")
+		userRequest = strings.TrimSpace(userRequest)
 	}
 
 	if url == "" {
-		color.Red("Usage: /url <URL> [-- request]")
+		ui.Errorln("Usage: /url <URL> [-- request]")
 		return
 	}
 
-	color.Yellow("Scraping URL: %s (this may take a few seconds...)", url)
+	ui.Warningln("Scraping URL: %s (this may take a few seconds...)", url)
 
 	// Add URL context first
 	if err := c.AddURLContext(url); err != nil {
-		color.Red("URL error: %v", err)
+		ui.Errorln("URL error: %v", err)
 		return
 	}
 
-	color.Green("Successfully retrieved webpage content from: %s", url)
+	ui.AIln("Successfully retrieved webpage content from: %s", url)
 
 	// If user provided a specific request, process it with the URL context
 	if userRequest != "" {
-		color.Cyan("Processing your request about the webpage...")
+		ui.Systemln("Processing your request about the webpage...")
 		ProcessInput(c, userRequest, cfg)
 	} else {
-		color.Yellow("Webpage content added to context. You can now ask questions about it.")
+		ui.Warningln("Webpage content added to context. You can now ask questions about it.")
 	}
 }
 
 func HandleExportCommand(c *Chat, cfg *config.Config) {
-	color.Yellow("\nExport options:")
-	color.White("1. Full conversation")
-	color.White("2. Last AI response")
-	color.White("3. Largest code block")
-	color.White("4. Search in conversation")
-	color.White("5. Cancel")
-
-	color.Blue("\nEnter your choice (1-5): ")
-	reader := bufio.NewReader(os.Stdin)
-	choice := strings.TrimSpace(readLine(reader))
+	var choice string
+	prompt := &survey.Select{
+		Message: "Choose what to export:",
+		Options: []string{
+			"Full conversation",
+			"Last AI response",
+			"Largest code block",
+			"Search in conversation",
+			"Cancel",
+		},
+		Default: "Full conversation",
+	}
+	err := survey.AskOne(prompt, &choice, survey.WithStdio(os.Stdin, os.Stdout, os.Stderr))
+	if err != nil {
+		ui.Warningln("\nExport canceled.")
+		return
+	}
 
 	var filename, content string
+
 	switch choice {
-	case "1":
+	case "Full conversation":
 		filename, content = c.Export("conversation", "")
-	case "2":
+	case "Last AI response":
 		filename, content = c.Export("last_response", "")
-	case "3":
+	case "Largest code block":
 		filename, content = c.Export("code_block", "")
-	case "4":
-		searchText := readSearchInput()
+	case "Search in conversation":
+		var searchText string
+		searchPrompt := &survey.Input{Message: "Enter text to search for:"}
+		survey.AskOne(searchPrompt, &searchText, survey.WithStdio(os.Stdin, os.Stdout, os.Stderr))
 		if searchText == "" {
-			color.Yellow("⚠️ Search text cannot be empty")
+			ui.Warningln("⚠️ Search text cannot be empty")
 			return
 		}
 		filename, content = c.Export("search_conversation", searchText)
 	default:
-		color.Yellow("💡 Export canceled.")
+		ui.Warningln("💡 Export canceled.")
 		return
 	}
 
 	if filename == "" || content == "" {
-		color.Red("❌ Nothing to export")
+		ui.Errorln("❌ Nothing to export")
 		return
 	}
 
 	fullPath := filepath.Join(cfg.ExportDir, filename)
 	if err := os.MkdirAll(cfg.ExportDir, 0755); err != nil {
-		color.Red("❌ Cannot create export directory: %v", err)
+		ui.Errorln("❌ Cannot create export directory: %v", err)
 		return
 	}
 
 	if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
-		color.Red("❌ Error saving file: %v", err)
+		ui.Errorln("❌ Error saving file: %v", err)
 		return
 	}
 
-	color.Green("✅ Saved to: %s", fullPath)
-}
-
-func readLine(reader *bufio.Reader) string {
-	input, _ := reader.ReadString('\n')
-	return strings.TrimSpace(input)
+	ui.AIln("✅ Saved to: %s", fullPath)
 }
 
 func (c *Chat) RefreshDynamicHeaders() error {
-	color.Yellow("🔄 Refreshing dynamic headers...")
-
+	ui.Warningln("⌛ Refreshing dynamic headers...")
 	if dynamicHeaders, err := ExtractDynamicHeaders(); err == nil {
 		c.FeSignals = dynamicHeaders.FeSignals
 		c.FeVersion = dynamicHeaders.FeVersion
 		c.VqdHash1 = dynamicHeaders.VqdHash1
-		color.Green("✅ Headers refreshed successfully")
+		ui.AIln("✅ Successfully refreshed dynamic headers")
 		return nil
 	} else {
-		color.Yellow("⚠️ Failed to refresh headers: %v", err)
+		ui.Warningln("⚠️ Failed to refresh dynamic headers: %v", err)
 		return err
 	}
 }
 
 func (c *Chat) ChangeModel(model models.Model) {
 	c.Model = model
-	displayName := shortenModelName(string(model))
-	setTerminalTitle(fmt.Sprintf("DuckDuckGo Chat - %s", displayName))
-
-	// Refresh headers when changing model as they might be model-specific
-	if err := c.RefreshDynamicHeaders(); err != nil {
-		color.Yellow("⚠️ Continuing with existing headers after refresh failure")
-	}
-
-	// Also refresh VQD token
-	c.NewVqd = GetVQD()
-	c.OldVqd = c.NewVqd
-	c.RetryCount = 0
-
-	color.Green("Model changed to: %s", displayName)
+	setTerminalTitle(fmt.Sprintf("DuckDuckGo Chat - %s", model))
+	ui.AIln("Model changed to %s", model)
 }

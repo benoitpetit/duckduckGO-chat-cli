@@ -1,48 +1,55 @@
 package chat
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"regexp"
-	"strings"
 
+	"duckduckgo-chat-cli/internal/ui"
+
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/atotto/clipboard"
-	"github.com/fatih/color"
 )
 
 func HandleCopyCommand(c *Chat) {
-	color.Yellow("Choose what to copy:")
-	color.White("1) Last Q&A exchange\n2) Largest code block\n3) Cancel")
-
-	fmt.Print("Enter your choice: ")
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
+	var choice string
+	prompt := &survey.Select{
+		Message: "Choose what to copy:",
+		Options: []string{
+			"Last Q&A exchange",
+			"Largest code block",
+			"Cancel",
+		},
+		Default: "Last Q&A exchange",
+	}
+	err := survey.AskOne(prompt, &choice, survey.WithStdio(os.Stdin, os.Stdout, os.Stderr))
+	if err != nil {
+		ui.Warningln("\nCopy canceled.")
+		return
+	}
 
 	var content string
-	var err error
 
-	switch input {
-	case "1":
+	switch choice {
+	case "Last Q&A exchange":
 		content, err = c.copyLastExchange()
-	case "2":
+	case "Largest code block":
 		content, err = c.copyLargestCodeBlock()
 	default:
-		color.Yellow("Copy canceled.")
+		ui.Warningln("Copy canceled.")
 		return
 	}
 
 	if err != nil {
-		color.Red("Error: %v", err)
+		ui.Errorln("Error: %v", err)
 		return
 	}
 
 	if err := clipboard.WriteAll(content); err != nil {
-		color.Red("Failed to copy to clipboard: %v", err)
+		ui.Errorln("Failed to copy to clipboard: %v", err)
 		return
 	}
-	color.Green("Content copied to clipboard")
+	ui.AIln("Content copied to clipboard")
 }
 
 func (c *Chat) copyLastExchange() (string, error) {

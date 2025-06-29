@@ -1,46 +1,88 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 
+	"duckduckgo-chat-cli/internal/api"
 	"duckduckgo-chat-cli/internal/chat"
 	"duckduckgo-chat-cli/internal/config"
 	"duckduckgo-chat-cli/internal/models"
+	"duckduckgo-chat-cli/internal/ui"
 
-	"github.com/fatih/color"
+	"github.com/AlecAivazis/survey/v2"
+	"github.com/c-bata/go-prompt"
 )
 
 // Version will be set at build time via ldflags
 var Version = "dev"
+
+var chatSession *chat.Chat
+var cfg *config.Config
+
+var commands = []prompt.Suggest{
+	{Text: "/help", Description: "Show the welcome message and command list"},
+	{Text: "/exit", Description: "Exit the chat"},
+	{Text: "/clear", Description: "Clear the chat history"},
+	{Text: "/history", Description: "Show the chat history"},
+	{Text: "/search", Description: "Search with a query"},
+	{Text: "/file", Description: "Chat with a file"},
+	{Text: "/library", Description: "Chat with your library"},
+	{Text: "/url", Description: "Chat with a URL"},
+	{Text: "/pmp", Description: "Use a predefined prompt"},
+	{Text: "/export", Description: "Export the chat history"},
+	{Text: "/copy", Description: "Copy the last response to the clipboard"},
+	{Text: "/config", Description: "Open the configuration menu"},
+	{Text: "/model", Description: "Change the chat model"},
+	{Text: "/version", Description: "Show version information"},
+	{Text: "/api", Description: "Start or stop the API server interactively"},
+}
+
+func completer(d prompt.Document) []prompt.Suggest {
+	// Only show suggestions if the text starts with a slash.
+	if !strings.HasPrefix(d.TextBeforeCursor(), "/") {
+		return nil
+	}
+
+	// If there's a space, we assume the user is typing an argument, not a command.
+	if strings.Contains(d.TextBeforeCursor(), " ") {
+		return nil // No suggestions
+	}
+
+	// Otherwise, suggest commands.
+	return prompt.FilterHasPrefix(commands, d.GetWordBeforeCursor(), true)
+}
 
 func main() {
 	// create a channel to listen for interrupts
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	color.Cyan("Welcome to DuckDuckGo AI Chat CLI!")
+	go func() {
+		<-sigChan
+		ui.Warningln("\nReceived interrupt. Exiting gracefully.")
+		os.Exit(0)
+	}()
 
-	cfg := config.Initialize()
+	ui.Systemln("Welcome to DuckDuckGo AI Chat CLI!")
+
+	cfg = config.Initialize()
 	models.CheckChromeVersion()
 
 	if !config.AcceptTermsOfService(cfg) {
-		color.Yellow("You must accept the terms to use this app. Exiting.")
+		ui.Warningln("You must accept the terms to use this app. Exiting.")
 		return
 	}
 
-	chatSession := chat.InitializeSession(cfg)
+	chatSession = chat.InitializeSession(cfg)
 
-	// move the cleanup function to a defer statement
-	cleanup := func() {
-		color.Yellow("\nExiting chat. Goodbye!")
+	if cfg.API.Enabled && cfg.API.Autostart {
+		api.StartServer(chatSession, cfg, cfg.API.Port)
 	}
-	defer cleanup()
 
 	if cfg.ShowMenu {
 		chat.PrintWelcomeMessage()
@@ -48,46 +90,26 @@ func main() {
 		chat.PrintCommands()
 	}
 
-	// create a channel to listen for user input
-	inputChan := make(chan string)
-	stopChan := make(chan struct{})
-	go readInput(inputChan, stopChan)
+	p := prompt.New(
+		executor,
+		completer,
+		prompt.OptionTitle("duckduckgo-chat-cli"),
+		prompt.OptionPrefix("You: "),
+		prompt.OptionPrefixTextColor(prompt.Blue),
+	)
+	p.Run()
 
-	for {
-		select {
-		case <-sigChan:
-			// stop the input goroutine
-			close(stopChan)
-			fmt.Println() // clear the line
-			return
-		case input := <-inputChan:
-			if input == "/exit" {
-				close(stopChan)
-				return
-			}
-			handleCommand(chatSession, cfg, input)
-			go readInput(inputChan, stopChan)
-		}
-	}
 }
 
-func readInput(inputChan chan string, stopChan chan struct{}) {
-	reader := bufio.NewReader(os.Stdin)
-
-	// show the user prompt
-	fmt.Print("\033[34mYou: \033[0m") // Blue color without newline
-
-	// read the user input
-	input, err := reader.ReadString('\n')
-	select {
-	case <-stopChan:
+func executor(input string) {
+	if input == "" {
 		return
-	default:
-		if err != nil {
-			return
-		}
-		inputChan <- strings.TrimSpace(input)
 	}
+	if input == "/exit" {
+		ui.Warningln("\nExiting chat. Goodbye!")
+		os.Exit(0)
+	}
+	handleCommand(chatSession, cfg, input)
 }
 
 func handleCommand(chatSession *chat.Chat, cfg *config.Config, input string) {
@@ -103,9 +125,9 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, input string) {
 		chat.PrintHistory(chatSession)
 	case strings.HasPrefix(input, "/search "):
 		chat.HandleSearchCommand(chatSession, input, cfg)
-	case strings.HasPrefix(input, "/file "):
+	case input == "/file" || strings.HasPrefix(input, "/file "):
 		chat.HandleFileCommand(chatSession, input, cfg)
-	case strings.HasPrefix(input, "/library"):
+	case input == "/library" || strings.HasPrefix(input, "/library "):
 		chat.HandleLibraryCommand(chatSession, input, cfg)
 	case strings.HasPrefix(input, "/url "):
 		chat.HandleURLCommand(chatSession, input, cfg)
@@ -124,15 +146,43 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, input string) {
 			chatSession.ChangeModel(models.GetModel(string(newModel)))
 			cfg.DefaultModel = string(newModel)
 			if err := config.SaveConfig(cfg); err != nil {
-				color.Red("Failed to save config: %v", err)
+				ui.Errorln("Failed to save config: %v", err)
 			}
 		}
 	case input == "/help":
 		chat.PrintWelcomeMessage()
+	case strings.HasPrefix(input, "/api"):
+		if api.IsRunning() {
+			confirm := false
+			prompt := &survey.Confirm{
+				Message: "The API server is currently running. Do you want to stop it?",
+				Default: true,
+			}
+			survey.AskOne(prompt, &confirm)
+			if confirm {
+				api.StopServer()
+			}
+		} else {
+			if !cfg.API.Enabled {
+				ui.Warningln("API is disabled in the configuration. Use /config to enable it.")
+				return
+			}
+			portStr := strings.TrimSpace(strings.TrimPrefix(input, "/api"))
+			port := cfg.API.Port
+			if portStr != "" {
+				if p, err := strconv.Atoi(portStr); err == nil {
+					port = p
+				} else {
+					ui.Errorln("Invalid port number.")
+					return
+				}
+			}
+			api.StartServer(chatSession, cfg, port)
+		}
 	case input == "/version":
-		color.Green("DuckDuckGo AI Chat CLI version %s", Version)
-		color.White("Go version: %s", runtime.Version())
-		color.White("OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
+		ui.AIln("DuckDuckGo AI Chat CLI version %s", Version)
+		ui.Mutedln("Go version: %s", runtime.Version())
+		ui.Mutedln("OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
 	default:
 		chat.ProcessInput(chatSession, input, cfg)
 	}

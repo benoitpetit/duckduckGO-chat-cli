@@ -1,7 +1,6 @@
 package models
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +9,9 @@ import (
 	"strconv"
 	"strings"
 
+	"duckduckgo-chat-cli/internal/ui"
+
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/fatih/color"
 )
 
@@ -19,8 +21,6 @@ const (
 	StatusHeaders    = "1"
 	MinChromeVersion = "115.0.5790.110"
 )
-
-const chromeRegistryPath = `HKEY_CURRENT_USER\Software\Google\Chrome\BLBeacon`
 
 type Model string
 type ModelAlias string
@@ -45,6 +45,14 @@ var modelMap = map[ModelAlias]Model{
 	LlamaAlias:    Llama,
 	MixtralAlias:  Mixtral,
 	o4miniAlias:   o4mini,
+}
+
+var modelDisplayMap = map[Model]string{
+	GPT4Mini: "GPT-4o-mini",
+	Claude3:  "Claude-3-haiku",
+	Llama:    "Llama 3.3",
+	Mixtral:  "Mistral Small 3",
+	o4mini:   "o4-mini",
 }
 
 func GetModel(alias string) Model {
@@ -191,51 +199,58 @@ func extractWindowsVersion(output string) string {
 }
 
 func HandleModelChange(chat interface{}, modelArg string) ModelAlias {
-	currentModel := GetCurrentModel(chat)
-
-	// Si un argument est fourni, essayer de le traiter directement
+	// If a model argument is provided, try to use it directly
 	if modelArg != "" {
-		if modelAlias := validateModelChoice(modelArg); modelAlias != "" {
-			return modelAlias
+		for alias, model := range modelMap {
+			if strings.EqualFold(modelArg, string(alias)) || strings.EqualFold(modelArg, string(model)) {
+				return alias
+			}
 		}
-		color.Red("Invalid model choice: %s", modelArg)
+		ui.Errorln("Invalid model choice: %s", modelArg)
 		return ""
 	}
 
-	// Afficher le menu interactif si aucun argument n'est fourni
-	color.Yellow("\nAvailable models:")
-	color.White("Current model: %s", currentModel)
-	color.White("1) GPT-4o-mini")
-	color.White("2) Claude-3-haiku")
-	color.White("3) Llama 3.3")
-	color.White("4) Mistral Small 3")
-	color.White("5) o4-mini")
-	color.White("6) Cancel")
+	// Show an interactive menu if no argument is provided
+	modelOptions := []string{
+		"GPT-4o-mini",
+		"Claude-3-haiku",
+		"Llama 3.3",
+		"Mistral Small 3",
+		"o4-mini",
+		"Cancel",
+	}
 
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("\nEnter your choice (1-6): ")
-	choice, err := reader.ReadString('\n')
+	currentModel := GetCurrentModel(chat)
+	defaultModel, ok := modelDisplayMap[currentModel]
+	if !ok {
+		defaultModel = "GPT-4o-mini" // Fallback
+	}
+
+	var choice string
+	prompt := &survey.Select{
+		Message: "Choose a new model:",
+		Options: modelOptions,
+		Default: defaultModel,
+	}
+	err := survey.AskOne(prompt, &choice, survey.WithStdio(os.Stdin, os.Stdout, os.Stderr))
 	if err != nil {
-		color.Red("Error reading input: %v", err)
+		// Gracefully exit on any error, including Ctrl+C (Interrupt)
 		return ""
 	}
-	return validateModelChoice(strings.TrimSpace(choice))
-}
 
-func validateModelChoice(choice string) ModelAlias {
 	switch strings.ToLower(choice) {
-	case "1", "gpt4mini", "gpt-4o-mini":
+	case "gpt-4o-mini":
 		return GPT4MiniAlias
-	case "2", "claude3", "claude-3-haiku":
+	case "claude-3-haiku":
 		return Claude3Alias
-	case "3", "llama":
+	case "llama 3.3":
 		return LlamaAlias
-	case "4", "mixtral":
+	case "mistral small 3":
 		return MixtralAlias
-	case "5", "o4mini":
+	case "o4mini":
 		return o4miniAlias
-	case "6", "cancel":
-		color.Yellow("Model change canceled")
+	case "cancel":
+		ui.Warningln("Model change canceled")
 		return ""
 	default:
 		return ""

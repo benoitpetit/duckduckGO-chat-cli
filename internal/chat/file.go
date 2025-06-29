@@ -2,52 +2,60 @@ package chat
 
 import (
 	"duckduckgo-chat-cli/internal/config"
+	"duckduckgo-chat-cli/internal/ui"
 	"fmt"
 	"os"
 	"strings"
-
-	"github.com/fatih/color"
 )
 
 func HandleFileCommand(c *Chat, input string, cfg *config.Config) {
-	// Parse the command: /file <path> -- <request>
-	commandInput := strings.TrimPrefix(input, "/file ")
-
 	var path, userRequest string
+	var err error
 
-	// Check if there's a -- separator
-	if strings.Contains(commandInput, " -- ") {
-		parts := strings.SplitN(commandInput, " -- ", 2)
-		path = strings.TrimSpace(parts[0])
-		if len(parts) > 1 {
-			userRequest = strings.TrimSpace(parts[1])
+	// Handle the case where the command is just "/file" to open the browser
+	if strings.TrimSpace(input) == "/file" {
+		path, err = ui.SelectFile()
+		if err != nil {
+			ui.Errorln("Error selecting file: %v", err)
+			return
 		}
 	} else {
-		// Fallback: if no --, treat everything as path for backward compatibility
-		path = strings.TrimSpace(commandInput)
+		// Handle the case with arguments: /file <path> [-- <request>]
+		commandInput := strings.TrimPrefix(input, "/file ")
+
+		if strings.Contains(commandInput, " -- ") {
+			parts := strings.SplitN(commandInput, " -- ", 2)
+			path = strings.TrimSpace(parts[0])
+			if len(parts) > 1 {
+				userRequest = strings.TrimSpace(parts[1])
+			}
+		} else {
+			path = strings.TrimSpace(commandInput)
+		}
 	}
 
+	// If no path was selected or provided, exit the command.
 	if path == "" {
-		color.Red("Usage: /file <path> [-- request]")
+		ui.Warningln("No file selected or specified.")
 		return
 	}
 
-	color.Yellow("Adding file content: %s", path)
+	ui.Warningln("Adding file content: %s", path)
 
 	// Add file context first
 	if err := c.AddFileContext(path); err != nil {
-		color.Red("File error: %v", err)
+		ui.Errorln("File error: %v", err)
 		return
 	}
 
-	color.Green("Successfully added content from file: %s", path)
+	ui.AIln("Successfully added content from file: %s", path)
 
 	// If user provided a specific request, process it with the file context
 	if userRequest != "" {
-		color.Cyan("Processing your request about the file...")
+		ui.Systemln("Processing your request about the file...")
 		ProcessInput(c, userRequest, cfg)
 	} else {
-		color.Yellow("File content added to context. You can now ask questions about it.")
+		ui.Warningln("File content added to context. You can now ask questions about it.")
 	}
 }
 
@@ -59,7 +67,7 @@ func (c *Chat) AddFileContext(path string) error {
 
 	contentLength := len(content)
 	if contentLength > 500 {
-		color.Cyan("Adding %d characters from file", contentLength)
+		ui.AIln("Adding %d characters from file", contentLength)
 	}
 
 	c.Messages = append(c.Messages, Message{
