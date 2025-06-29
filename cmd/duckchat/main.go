@@ -10,6 +10,8 @@ import (
 
 	"duckduckgo-chat-cli/internal/api"
 	"duckduckgo-chat-cli/internal/chat"
+	"duckduckgo-chat-cli/internal/chatcontext"
+	"duckduckgo-chat-cli/internal/command"
 	"duckduckgo-chat-cli/internal/config"
 	"duckduckgo-chat-cli/internal/models"
 	"duckduckgo-chat-cli/internal/ui"
@@ -43,18 +45,23 @@ var commands = []prompt.Suggest{
 }
 
 func completer(d prompt.Document) []prompt.Suggest {
-	// Only show suggestions if the text starts with a slash.
-	if !strings.HasPrefix(d.TextBeforeCursor(), "/") {
+	text := d.TextBeforeCursor()
+	segment := text
+	if i := strings.LastIndex(text, "&&"); i >= 0 {
+		segment = strings.TrimLeft(text[i+2:], " ")
+	}
+
+	// We only want to complete the command name, not its arguments.
+	if strings.Contains(segment, " ") {
 		return nil
 	}
 
-	// If there's a space, we assume the user is typing an argument, not a command.
-	if strings.Contains(d.TextBeforeCursor(), " ") {
-		return nil // No suggestions
+	// We only want to complete if the segment starts with a slash
+	if strings.HasPrefix(segment, "/") {
+		return prompt.FilterHasPrefix(commands, segment, true)
 	}
 
-	// Otherwise, suggest commands.
-	return prompt.FilterHasPrefix(commands, d.GetWordBeforeCursor(), true)
+	return nil
 }
 
 func main() {
@@ -109,39 +116,86 @@ func executor(input string) {
 		ui.Warningln("\nExiting chat. Goodbye!")
 		os.Exit(0)
 	}
-	handleCommand(chatSession, cfg, input)
+
+	chainedCmd, err := command.Parse(input)
+	if err != nil {
+		ui.Errorln("Error parsing command: %v", err)
+		return
+	}
+
+	if len(chainedCmd.Commands) > 1 || chainedCmd.Prompt != "" {
+		handleCommandChain(chatSession, cfg, chainedCmd)
+	} else if len(chainedCmd.Commands) == 1 {
+		handleCommand(chatSession, cfg, chainedCmd.Commands[0])
+	}
 }
 
-func handleCommand(chatSession *chat.Chat, cfg *config.Config, input string) {
+func handleCommandChain(chatSession *chat.Chat, cfg *config.Config, chainedCmd *command.ChainedCommand) {
+	chainCtx := chatcontext.New()
+
+	for _, cmd := range chainedCmd.Commands {
+		switch cmd.Type {
+		case "/file":
+			chat.HandleFileCommand(chatSession, cmd.Raw, cfg, chainCtx)
+		case "/url":
+			chat.HandleURLCommand(chatSession, cmd.Raw, cfg, chainCtx)
+		case "/search":
+			chat.HandleSearchCommand(chatSession, cmd.Raw, cfg, chainCtx)
+		default:
+			ui.Errorln("Command '%s' is not supported in a command chain.", cmd.Type)
+			return
+		}
+	}
+
+	if chainCtx.IsEmpty() {
+		if chainedCmd.Prompt != "" {
+			// This case is for when the user just types "-- some prompt"
+			chat.ProcessInput(chatSession, chainedCmd.Prompt, cfg)
+		}
+		return
+	}
+
+	// We have context. Now check for a prompt.
+	finalInput := chainCtx.String()
+	if chainedCmd.Prompt != "" {
+		finalInput += "\n\n" + chainedCmd.Prompt
+		chat.ProcessInput(chatSession, finalInput, cfg)
+	} else {
+		// Context loaded, but no prompt. Add to session and notify user.
+		chatSession.AddContextMessage(finalInput)
+		ui.AIln("Context from the command chain has been added. You can now ask questions about it.")
+	}
+}
+
+func handleCommand(chatSession *chat.Chat, cfg *config.Config, cmd *command.Command) {
 	// if the input is empty, return
-	if input == "" {
+	if cmd.Raw == "" {
 		return
 	}
 
 	switch {
-	case input == "/clear":
+	case cmd.Type == "/clear":
 		chatSession.Clear(cfg)
-	case input == "/history":
+	case cmd.Type == "/history":
 		chat.PrintHistory(chatSession)
-	case strings.HasPrefix(input, "/search "):
-		chat.HandleSearchCommand(chatSession, input, cfg)
-	case input == "/file" || strings.HasPrefix(input, "/file "):
-		chat.HandleFileCommand(chatSession, input, cfg)
-	case input == "/library" || strings.HasPrefix(input, "/library "):
-		chat.HandleLibraryCommand(chatSession, input, cfg)
-	case strings.HasPrefix(input, "/url "):
-		chat.HandleURLCommand(chatSession, input, cfg)
-	case strings.HasPrefix(input, "/pmp"):
-		chat.HandlePMPCommand(chatSession, input, cfg)
-	case input == "/export":
+	case cmd.Type == "/search":
+		chat.HandleSearchCommand(chatSession, cmd.Raw, cfg, nil)
+	case cmd.Type == "/file":
+		chat.HandleFileCommand(chatSession, cmd.Raw, cfg, nil)
+	case cmd.Type == "/library":
+		chat.HandleLibraryCommand(chatSession, cmd.Raw, cfg)
+	case cmd.Type == "/url":
+		chat.HandleURLCommand(chatSession, cmd.Raw, cfg, nil)
+	case cmd.Type == "/pmp":
+		chat.HandlePMPCommand(chatSession, cmd.Raw, cfg)
+	case cmd.Type == "/export":
 		chat.HandleExportCommand(chatSession, cfg)
-	case input == "/copy":
+	case cmd.Type == "/copy":
 		chat.HandleCopyCommand(chatSession)
-	case input == "/config":
+	case cmd.Type == "/config":
 		config.HandleConfiguration(cfg, chatSession)
-	case strings.HasPrefix(input, "/model"):
-		modelArg := strings.TrimSpace(strings.TrimPrefix(input, "/model"))
-		newModel := models.HandleModelChange(chatSession, modelArg)
+	case cmd.Type == "/model":
+		newModel := models.HandleModelChange(chatSession, cmd.Args)
 		if newModel != "" {
 			chatSession.ChangeModel(models.GetModel(string(newModel)))
 			cfg.DefaultModel = string(newModel)
@@ -149,9 +203,9 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, input string) {
 				ui.Errorln("Failed to save config: %v", err)
 			}
 		}
-	case input == "/help":
+	case cmd.Type == "/help":
 		chat.PrintWelcomeMessage()
-	case strings.HasPrefix(input, "/api"):
+	case cmd.Type == "/api":
 		if api.IsRunning() {
 			confirm := false
 			prompt := &survey.Confirm{
@@ -167,10 +221,9 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, input string) {
 				ui.Warningln("API is disabled in the configuration. Use /config to enable it.")
 				return
 			}
-			portStr := strings.TrimSpace(strings.TrimPrefix(input, "/api"))
 			port := cfg.API.Port
-			if portStr != "" {
-				if p, err := strconv.Atoi(portStr); err == nil {
+			if cmd.Args != "" {
+				if p, err := strconv.Atoi(cmd.Args); err == nil {
 					port = p
 				} else {
 					ui.Errorln("Invalid port number.")
@@ -179,20 +232,20 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, input string) {
 			}
 			api.StartServer(chatSession, cfg, port)
 		}
-	case input == "/version":
+	case cmd.Type == "/version":
 		ui.AIln("DuckDuckGo AI Chat CLI version %s", Version)
 		ui.Mutedln("Go version: %s", runtime.Version())
 		ui.Mutedln("OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
 	default:
 		// Check if the input is potentially pasted content (long text, URLs, etc.)
-		if cfg.ConfirmLongInput && shouldConfirmLongInput(input) {
-			confirmed := confirmSendMessage(input)
+		if cfg.ConfirmLongInput && shouldConfirmLongInput(cmd.Raw) {
+			confirmed := confirmSendMessage(cmd.Raw)
 			if !confirmed {
 				ui.Warningln("Message not sent.")
 				return
 			}
 		}
-		chat.ProcessInput(chatSession, input, cfg)
+		chat.ProcessInput(chatSession, cmd.Raw, cfg)
 	}
 }
 

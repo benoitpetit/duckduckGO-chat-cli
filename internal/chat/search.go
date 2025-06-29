@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"duckduckgo-chat-cli/internal/chatcontext"
 	"duckduckgo-chat-cli/internal/config"
 
 	"github.com/PuerkitoBio/goquery"
@@ -23,7 +24,7 @@ type SearchResult struct {
 	HtmlSnippet      string
 }
 
-func HandleSearchCommand(c *Chat, input string, cfg *config.Config) {
+func HandleSearchCommand(c *Chat, input string, cfg *config.Config, chainCtx *chatcontext.Context) {
 	// Parse the command: /search <query> -- <request>
 	commandInput := strings.TrimPrefix(input, "/search ")
 
@@ -59,19 +60,25 @@ func HandleSearchCommand(c *Chat, input string, cfg *config.Config) {
 	}
 
 	contextMsg := formatSearchResults(results, cfg.Search.IncludeSnippet)
-	c.Messages = append(c.Messages, Message{
-		Role:    "user",
-		Content: fmt.Sprintf("[Search Context]\n%s", contextMsg),
-	})
 
-	color.Green("Added %d search results to the context", len(results))
-
-	// If user provided a specific request, process it with the search context
-	if userRequest != "" {
-		color.Cyan("Processing your request about the search results...")
-		ProcessInput(c, userRequest, cfg)
+	if chainCtx != nil {
+		chainCtx.AddSearch(query, contextMsg)
+		color.Green("Added %d search results to the chain context", len(results))
 	} else {
-		color.Yellow("Search results added to context. You can now ask questions about them.")
+		c.Messages = append(c.Messages, Message{
+			Role:    "user",
+			Content: fmt.Sprintf("[Search Context]\n%s", contextMsg),
+		})
+
+		color.Green("Added %d search results to the context", len(results))
+
+		// If user provided a specific request, process it with the search context
+		if userRequest != "" {
+			color.Cyan("Processing your request about the search results...")
+			ProcessInput(c, userRequest, cfg)
+		} else {
+			color.Yellow("Search results added to context. You can now ask questions about them.")
+		}
 	}
 }
 

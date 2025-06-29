@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"duckduckgo-chat-cli/internal/chatcontext"
 	"duckduckgo-chat-cli/internal/config"
 	"duckduckgo-chat-cli/internal/models"
 	"duckduckgo-chat-cli/internal/scrape"
@@ -581,39 +582,40 @@ func printCommandsTable(commands []CommandHelp) {
 	}
 }
 
-func HandleURLCommand(c *Chat, input string, cfg *config.Config) {
-	commandInput := strings.TrimPrefix(input, "/url ")
-	parts := strings.SplitN(commandInput, " -- ", 2)
-	url := strings.TrimSpace(parts[0])
-	userRequest := ""
-
-	if len(parts) > 1 {
-		userRequest = strings.TrimPrefix(parts[1], "request")
-		userRequest = strings.TrimSpace(userRequest)
-	}
-
-	if url == "" {
-		ui.Errorln("Usage: /url <URL> [-- request]")
+func HandleURLCommand(c *Chat, input string, cfg *config.Config, chainCtx *chatcontext.Context) {
+	urlStr := strings.TrimSpace(strings.TrimPrefix(input, "/url"))
+	if urlStr == "" {
+		ui.Errorln("URL cannot be empty.")
 		return
 	}
 
-	ui.Warningln("Scraping URL: %s (this may take a few seconds...)", url)
-
-	// Add URL context first
-	if err := c.AddURLContext(url); err != nil {
+	result, err := scrape.WebContent(urlStr)
+	if err != nil {
 		ui.Errorln("URL error: %v", err)
 		return
 	}
 
-	ui.AIln("Successfully retrieved webpage content from: %s", url)
-
-	// If user provided a specific request, process it with the URL context
-	if userRequest != "" {
-		ui.Systemln("Processing your request about the webpage...")
-		ProcessInput(c, userRequest, cfg)
+	if chainCtx != nil {
+		chainCtx.AddURL(urlStr, result.Content)
+		ui.AIln("Successfully added content from URL to chain context: %s", urlStr)
 	} else {
-		ui.Warningln("Webpage content added to context. You can now ask questions about it.")
+		ui.Warningln("Adding URL content: %s", urlStr)
+		c.addURLContext(urlStr, result.Content)
+		ui.AIln("Successfully added content from URL: %s", urlStr)
+		ui.Warningln("You can now ask questions about the URL content.")
 	}
+}
+
+func (c *Chat) addURLContext(url string, content string) {
+	contentLength := len(content)
+	if contentLength > 500 {
+		ui.AIln("Adding %d characters from URL", contentLength)
+	}
+
+	c.Messages = append(c.Messages, Message{
+		Role:    "user",
+		Content: fmt.Sprintf("[URL Context]\nURL: %s\n\n%s", url, content),
+	})
 }
 
 func HandleExportCommand(c *Chat, cfg *config.Config) {
@@ -695,4 +697,11 @@ func (c *Chat) ChangeModel(model models.Model) {
 	c.Model = model
 	setTerminalTitle(fmt.Sprintf("DuckDuckGo Chat - %s", model))
 	ui.AIln("Model changed to %s", model)
+}
+
+func (c *Chat) AddContextMessage(content string) {
+	c.Messages = append(c.Messages, Message{
+		Role:    "user",
+		Content: content,
+	})
 }
