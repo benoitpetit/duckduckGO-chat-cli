@@ -238,6 +238,44 @@ func ProcessInput(c *Chat, input string, cfg *config.Config) {
 	})
 }
 
+// renderStreamToString captures the stream output into a single string.
+func renderStreamToString(stream <-chan string) string {
+	var fullResponse strings.Builder
+	var currentLine strings.Builder
+	inCodeBlock := false
+	var codeBlockLang string
+
+	for chunk := range stream {
+		for _, char := range chunk {
+			currentLine.WriteRune(char)
+			// This is a simplified version of RenderStream.
+			// It doesn't handle complex ANSI and formatting, just captures the text.
+			if char == '\n' {
+				lineStr := currentLine.String()
+				if strings.HasPrefix(lineStr, "```") {
+					if !inCodeBlock {
+						inCodeBlock = true
+						codeBlockLang = strings.TrimSpace(strings.TrimPrefix(lineStr, "```"))
+						fullResponse.WriteString("```" + codeBlockLang + "\n")
+					} else {
+						inCodeBlock = false
+						fullResponse.WriteString("```\n")
+					}
+				} else {
+					fullResponse.WriteString(lineStr)
+				}
+				currentLine.Reset()
+			}
+		}
+	}
+
+	if currentLine.Len() > 0 {
+		fullResponse.WriteString(currentLine.String())
+	}
+
+	return fullResponse.String()
+}
+
 func ProcessInputAndReturn(c *Chat, input string, cfg *config.Config) (string, error) {
 	if strings.TrimSpace(input) == "" {
 		return "", nil
@@ -249,33 +287,29 @@ func ProcessInputAndReturn(c *Chat, input string, cfg *config.Config) (string, e
 	// If it's the first message, combine GlobalPrompt and user message
 	actualMessage := input
 	if isFirstMessage && cfg.GlobalPrompt != "" {
-		// For the API, send GlobalPrompt and user message together
 		actualMessage = cfg.GlobalPrompt + "\n\n" + input
 	}
 
-	// Add the combined message (or just user message) to send to the API
 	c.Messages = append(c.Messages, Message{
 		Role:    "user",
 		Content: actualMessage,
 	})
 
-	// Send the message and display the response
 	stream, err := c.FetchStream(actualMessage)
 	if err != nil {
-		return "", fmt.Errorf("error: %v", err)
+		return "", fmt.Errorf("error fetching stream: %w", err)
 	}
 
-	var responseBuffer strings.Builder
-	for chunk := range stream {
-		responseBuffer.WriteString(chunk)
-	}
+	// Capture the entire response from the stream
+	finalResponse := renderStreamToString(stream)
 
-	response := responseBuffer.String()
+	// Add the assistant's response to the message history
 	c.Messages = append(c.Messages, Message{
 		Role:    "assistant",
-		Content: response,
+		Content: finalResponse,
 	})
-	return response, nil
+
+	return finalResponse, nil
 }
 
 func shortenModelName(model string) string {
@@ -284,13 +318,15 @@ func shortenModelName(model string) string {
 		"claude-3-haiku-20240307":                   "claude-3-haiku",
 		"meta-llama/Llama-3.3-70B-Instruct-Turbo":   "llama",
 		"mistralai/Mistral-Small-24B-Instruct-2501": "mixtral",
+		"o4-mini": "o4mini",
 		"o3-mini": "o3mini",
 	}
 
 	if shortName, exists := displayNames[model]; exists {
 		return string(shortName)
 	}
-	return model
+
+	return "unknown"
 }
 
 func (c *Chat) FetchStream(content string) (<-chan string, error) {

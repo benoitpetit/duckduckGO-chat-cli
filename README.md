@@ -26,59 +26,48 @@
 
 ## ✨ Key Features
 
-<table align="center" style="width: 100%; border-collapse: separate; border-spacing: 8px;">
-<tr>
-<td width="33%" style="background-color: #1e1e1e; padding: 20px; border-radius: 8px; color: #ffffff; text-align: center; vertical-align: top;">
+### 💬 Chat Experience
+- **🔄 Real-time streaming** - Live response display with smooth markdown formatting
+- **🤖 Multiple AI models** - GPT-4o mini, Claude 3 Haiku, Llama 3.3, Mistral Small, o4-mini & more
+- **💻 Terminal-native** - Optimized for command-line workflows with interactive menus
+- **⌨️ Smart autocompletion** - Interactive command menus and context-aware suggestions
+- **🔑 Auto-authentication** - Seamless session management with dynamic header refresh
+- **🔄 Model switching** - Interactive model selection during conversations
 
-<div style="margin-bottom: 15px;">
-<h3>💬 Chat Experience</h3>
-</div>
+### 🧠 Context Integration
+- **🔍 Web search** - Integrate DuckDuckGo search results into conversations
+- **📄 File processing** - Add local file content (15+ formats: Go, Python, JS, TS, JSON, MD, etc.)
+- **🌐 URL scraping** - Extract and analyze webpage content with Chrome-based scraping
+- **🚀 Project analysis** - Generate comprehensive project prompts with PMP auto-installation
+- **💾 Session persistence** - Maintain conversation history across sessions
+- **📚 Library management** - Organize and search through document collections
 
-<div style="display: inline-block; text-align: left; color: #e0e0e0;">
+### 🛠️ Productivity Tools
+- **📋 Smart clipboard** - Copy responses, code blocks, or full conversations with interactive selection
+- **📤 Advanced export** - Save conversations in multiple formats with search-based filtering
+- **📝 History management** - Browse, search, and restore previous conversations with timestamps
+- **🔍 Content search** - Search within conversations and document libraries
+- **⚙️ Interactive config** - Visual configuration menus for all settings
 
-- 🔄 Streaming responses
-- 🤖 Multiple AI models  
-- 💻 Terminal power
-- 🔑 Auto token refresh
+### 🌐 API Server
+- **🚀 REST API** - Built-in HTTP server for external integrations
+- **📡 Real-time endpoints** - Chat, history, and status endpoints
+- **🔧 Request logging** - Configurable API request/response logging
+- **📖 Auto-documentation** - Interactive API documentation at root endpoint
 
-</div>
+### 📚 Library System
+- **📁 Document collections** - Organize files into searchable libraries
+- **🔍 Advanced search** - Search across all libraries with pattern matching
+- **📊 Library stats** - File counts, sizes, and modification dates
+- **🎯 Selective loading** - Load specific libraries or files into context
+- **📁 Multi-format support** - 15+ file formats automatically recognized
 
-</td>
-<td width="33%" style="background-color: #1e1e1e; padding: 20px; border-radius: 8px; color: #ffffff; text-align: center; vertical-align: top;">
-
-<div style="margin-bottom: 15px;">
-<h3>🧠 Context Datas</h3>
-</div>
-
-<div style="display: inline-block; text-align: left; color: #e0e0e0;">
-
-- 🔍 Web search
-- 📄 File content
-- 🌐 URL scraping
-- 🚀 Prompt generation
-- 💾 Session management
-
-</div>
-
-</td>
-<td width="33%" style="background-color: #1e1e1e; padding: 20px; border-radius: 8px; color: #ffffff; text-align: center; vertical-align: top;">
-
-<div style="margin-bottom: 15px;">
-<h3>🛠️ Productivity Tools</h3>
-</div>
-
-<div style="display: inline-block; text-align: left; color: #e0e0e0;">
-
-- 📋 Clipboard
-- 📤 Flexible export
-- 📝 Conversation history
-- ⚙️ Customizable settings
-
-</div>
-
-</td>
-</tr>
-</table>
+### 🔧 Advanced Features
+- **🛠️ PMP Integration** - Auto-install and use Prompt My Project for code analysis
+- **🔄 Dynamic headers** - Automatic browser session management
+- **📱 Cross-platform** - Linux, Windows, macOS support
+- **🎨 Rich formatting** - Colored output with markdown rendering
+- **⚡ Performance** - Efficient memory usage and fast response times
 
 ## 🤖 Available Models
 

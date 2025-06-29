@@ -87,7 +87,7 @@ func documentationHandler(w http.ResponseWriter, r *http.Request) {
 			{
 				"path":        "/chat",
 				"method":      "POST",
-				"description": "Send a message to the chat. The response from the AI is streamed to the CLI console.",
+				"description": "Send a message to the chat and get the AI's response back.",
 				"body":        `{"message": "your message here"}`,
 			},
 			{
@@ -131,7 +131,12 @@ func chatHandler(chatSession *chat.Chat, cfg *config.Config) http.HandlerFunc {
 		// If logging is enabled, print to the console
 		if cfg.API.LogRequests {
 			ui.APILog("Received message: '%s'", requestBody.Message)
-			ui.APILog("Sending response: '%s'", response)
+			// The full response can be long, so let's log a snippet
+			responseSnippet := response
+			if len(responseSnippet) > 100 {
+				responseSnippet = responseSnippet[:100] + "..."
+			}
+			ui.APILog("Sending response snippet: '%s'", responseSnippet)
 		}
 
 		// Return the response to the API client

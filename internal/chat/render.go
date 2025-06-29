@@ -18,6 +18,7 @@ type StreamRenderer struct {
 	terminalWidth  int
 	modelName      string
 	contentStarted bool
+	linesDisplayed int
 }
 
 // NewStreamRenderer creates a new streaming renderer
@@ -55,6 +56,7 @@ func NewStreamRenderer(modelName string) (*StreamRenderer, error) {
 		terminalWidth:  width,
 		modelName:      modelName,
 		contentStarted: false,
+		linesDisplayed: 0,
 	}, nil
 }
 
@@ -99,7 +101,7 @@ func (sr *StreamRenderer) ProcessStream(stream <-chan string) string {
 		case chunk, ok := <-stream:
 			if !ok {
 				// Stream finished - replace raw content with formatted version
-				sr.replaceWithFormattedContent(finalContent.String(), cursorSaved)
+				sr.replaceWithFormattedContent(finalContent.String(), cursorSaved, contentStarted)
 				return finalContent.String()
 			}
 
@@ -109,11 +111,16 @@ func (sr *StreamRenderer) ProcessStream(stream <-chan string) string {
 			if !contentStarted {
 				fmt.Print("\r\033[K") // Clear spinner line
 				color.New(color.FgHiGreen, color.Bold).Printf("%s: ", sr.modelName)
+				fmt.Print("\n") // Start content on a new line for consistency
 				// Save cursor position right before content starts
 				fmt.Print("\033[s") // Save cursor position
 				cursorSaved = true
 				contentStarted = true
+				sr.linesDisplayed++ // Account for the newline we just added
 			}
+
+			// Count lines displayed for proper cleanup later
+			sr.linesDisplayed += strings.Count(chunk, "\n")
 
 			// Display raw content in real-time
 			fmt.Print(chunk)
@@ -133,36 +140,61 @@ func (sr *StreamRenderer) ProcessStream(stream <-chan string) string {
 }
 
 // replaceWithFormattedContent clears the raw content and displays the formatted version
-func (sr *StreamRenderer) replaceWithFormattedContent(content string, cursorSaved bool) {
+func (sr *StreamRenderer) replaceWithFormattedContent(content string, cursorSaved bool, contentStarted bool) {
 	if content == "" {
 		fmt.Println()
 		return
 	}
 
-	// If cursor was saved, restore to that position and clear from there
-	if cursorSaved {
+	// Only perform cleanup if content was actually displayed
+	if contentStarted {
+		// Move cursor up by the number of lines displayed, but be conservative
+		// to avoid moving up too far and corrupting previous terminal content
+		linesToMoveUp := sr.linesDisplayed
+		if linesToMoveUp > 50 { // Safety limit to prevent terminal corruption
+			linesToMoveUp = 50
+		}
+
+		if linesToMoveUp > 0 {
+			fmt.Printf("\033[%dA", linesToMoveUp)
+		}
+
+		// Move to beginning of line and clear everything from here down
+		fmt.Print("\r\033[J")
+
+		// Reprint model name and start content on new line for consistency
+		color.New(color.FgHiGreen, color.Bold).Printf("%s: ", sr.modelName)
+		fmt.Print("\n")
+	} else if cursorSaved {
+		// Fallback to cursor restoration if available
 		fmt.Print("\033[u") // Restore cursor position
 		fmt.Print("\033[J") // Clear from cursor to end of screen
+		color.New(color.FgHiGreen, color.Bold).Printf("%s: ", sr.modelName)
+		fmt.Print("\n")
 	} else {
-		// Fallback: clear current line and start fresh
+		// Last resort: clear current line and start fresh
 		fmt.Print("\r\033[K")
 		color.New(color.FgHiGreen, color.Bold).Printf("%s: ", sr.modelName)
+		fmt.Print("\n")
 	}
 
 	// Try to render as markdown for the final display
 	rendered, err := sr.renderer.Render(content)
 	if err != nil {
 		// Fallback to raw text if markdown rendering fails
-		fmt.Print(content)
+		// Remove leading whitespace/newlines for consistent positioning
+		cleanContent := strings.TrimLeft(content, " \n\t\r")
+		fmt.Print(cleanContent)
 		// Ensure we end with a newline for raw content
-		if !strings.HasSuffix(content, "\n") {
+		if !strings.HasSuffix(cleanContent, "\n") {
 			fmt.Println()
 		}
 	} else {
-		// Print the rendered markdown
-		fmt.Print(rendered)
+		// Print the rendered markdown, removing leading whitespace for consistent positioning
+		cleanRendered := strings.TrimLeft(rendered, " \n\t\r")
+		fmt.Print(cleanRendered)
 		// Ensure we end with a newline for rendered content
-		if !strings.HasSuffix(rendered, "\n") {
+		if !strings.HasSuffix(cleanRendered, "\n") {
 			fmt.Println()
 		}
 	}
@@ -184,6 +216,7 @@ func renderStreamFallback(stream <-chan string, modelName string) string {
 		if !contentStarted {
 			fmt.Print("\r\033[K") // Clear loading line
 			color.New(color.FgHiGreen, color.Bold).Printf("%s: ", modelName)
+			fmt.Print("\n") // Start content on new line for consistency
 			contentStarted = true
 		}
 
