@@ -147,32 +147,18 @@ func (sr *StreamRenderer) replaceWithFormattedContent(content string, cursorSave
 	}
 
 	// Only perform cleanup if content was actually displayed
-	if contentStarted {
-		// Move cursor up by the number of lines displayed, but be conservative
-		// to avoid moving up too far and corrupting previous terminal content
-		linesToMoveUp := sr.linesDisplayed
-		if linesToMoveUp > 50 { // Safety limit to prevent terminal corruption
-			linesToMoveUp = 50
-		}
-
-		if linesToMoveUp > 0 {
-			fmt.Printf("\033[%dA", linesToMoveUp)
-		}
-
-		// Move to beginning of line and clear everything from here down
-		fmt.Print("\r\033[J")
+	if contentStarted && cursorSaved {
+		// Restore cursor to the position saved right before the raw stream started
+		fmt.Print("\033[u")
+		// Clear everything from the restored cursor position to the end of the screen
+		fmt.Print("\033[J")
 
 		// Reprint model name and start content on new line for consistency
 		color.New(color.FgHiGreen, color.Bold).Printf("%s: ", sr.modelName)
 		fmt.Print("\n")
-	} else if cursorSaved {
-		// Fallback to cursor restoration if available
-		fmt.Print("\033[u") // Restore cursor position
-		fmt.Print("\033[J") // Clear from cursor to end of screen
-		color.New(color.FgHiGreen, color.Bold).Printf("%s: ", sr.modelName)
-		fmt.Print("\n")
 	} else {
-		// Last resort: clear current line and start fresh
+		// Fallback for cases where cursor wasn't saved or content didn't start
+		// (e.g., empty response from API)
 		fmt.Print("\r\033[K")
 		color.New(color.FgHiGreen, color.Bold).Printf("%s: ", sr.modelName)
 		fmt.Print("\n")

@@ -184,6 +184,68 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, input string) {
 		ui.Mutedln("Go version: %s", runtime.Version())
 		ui.Mutedln("OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
 	default:
+		// Check if the input is potentially pasted content (long text, URLs, etc.)
+		if cfg.ConfirmLongInput && shouldConfirmLongInput(input) {
+			confirmed := confirmSendMessage(input)
+			if !confirmed {
+				ui.Warningln("Message not sent.")
+				return
+			}
+		}
 		chat.ProcessInput(chatSession, input, cfg)
 	}
+}
+
+// shouldConfirmLongInput determines if input should be confirmed before sending
+func shouldConfirmLongInput(input string) bool {
+	// Trim whitespace for accurate length calculation
+	trimmedInput := strings.TrimSpace(input)
+
+	// Check if input is longer than 500 characters
+	if len(trimmedInput) > 500 {
+		return true
+	}
+
+	// Check if input looks like a URL (starts with http/https or contains common URL patterns)
+	if strings.HasPrefix(trimmedInput, "http://") || strings.HasPrefix(trimmedInput, "https://") {
+		return true
+	}
+
+	// Check for other URL-like patterns (www. or contains multiple dots suggesting a domain)
+	if strings.HasPrefix(trimmedInput, "www.") || (strings.Count(trimmedInput, ".") >= 2 && !strings.Contains(trimmedInput, " ")) {
+		return true
+	}
+
+	// Check if input contains newlines (multiline paste)
+	if strings.Count(trimmedInput, "\n") > 3 {
+		return true
+	}
+
+	return false
+}
+
+// confirmSendMessage asks user to confirm sending the message
+func confirmSendMessage(input string) bool {
+	// Show preview of the input
+	preview := input
+	if len(preview) > 200 {
+		preview = preview[:200] + "..."
+	}
+
+	ui.Warningln("\nDetected potentially long or pasted content:")
+	ui.Mutedln("Preview: %s", strings.ReplaceAll(preview, "\n", "\\n"))
+
+	confirm := false
+	prompt := &survey.Confirm{
+		Message: "Do you want to send this as a message to the AI?",
+		Default: false,
+	}
+
+	err := survey.AskOne(prompt, &confirm, survey.WithStdio(os.Stdin, os.Stdout, os.Stderr))
+	if err != nil {
+		// If there's an error (like Ctrl+C), assume no
+		return false
+	}
+
+	return confirm
 }

@@ -37,15 +37,16 @@ type APIConfig struct {
 }
 
 type Config struct {
-	TOSAccepted    bool          `json:"tos_accepted"`
-	DefaultModel   string        `json:"default_model"`
-	ExportDir      string        `json:"export_dir"`
-	LastUpdateTime time.Time     `json:"last_update_time"`
-	Search         SearchConfig  `json:"search"`
-	Library        LibraryConfig `json:"library"`
-	API            APIConfig     `json:"api"`
-	ShowMenu       bool          `json:"show_menu"`
-	GlobalPrompt   string        `json:"global_prompt"`
+	TOSAccepted      bool          `json:"tos_accepted"`
+	DefaultModel     string        `json:"default_model"`
+	ExportDir        string        `json:"export_dir"`
+	LastUpdateTime   time.Time     `json:"last_update_time"`
+	Search           SearchConfig  `json:"search"`
+	Library          LibraryConfig `json:"library"`
+	API              APIConfig     `json:"api"`
+	ShowMenu         bool          `json:"show_menu"`
+	GlobalPrompt     string        `json:"global_prompt"`
+	ConfirmLongInput bool          `json:"confirm_long_input"`
 }
 
 func Initialize() *Config {
@@ -86,10 +87,11 @@ func Initialize() *Config {
 
 func loadConfig() *Config {
 	cfg := &Config{
-		TOSAccepted:    false,
-		DefaultModel:   "gpt-4o-mini",
-		ExportDir:      defaultExportPath(),
-		LastUpdateTime: time.Now(),
+		TOSAccepted:      false,
+		DefaultModel:     "gpt-4o-mini",
+		ExportDir:        defaultExportPath(),
+		LastUpdateTime:   time.Now(),
+		ConfirmLongInput: true, // default to enabled for safety
 	}
 
 	if data, err := os.ReadFile(configPath()); err == nil {
@@ -181,6 +183,7 @@ func HandleConfiguration(cfg *Config, chatSession interfaces.ChatSession) {
 				"Search Settings",
 				"Show Commands Menu",
 				"Global Prompt",
+				"Long Input Protection",
 				"Library Settings",
 				"API Settings",
 				"Back to chat",
@@ -200,6 +203,8 @@ func HandleConfiguration(cfg *Config, chatSession interfaces.ChatSession) {
 			handleShowMenuChange(cfg)
 		case "Global Prompt":
 			handleGlobalPromptChange(cfg)
+		case "Long Input Protection":
+			handleLongInputProtectionChange(cfg)
 		case "Library Settings":
 			handleLibrarySettings(cfg)
 		case "API Settings":
@@ -405,6 +410,22 @@ func handleAPIPortChange(cfg *Config) {
 		saveAndReport(cfg, fmt.Sprintf("API Port updated to: %d", port))
 	} else {
 		ui.Errorln("Invalid port number. No changes made.")
+	}
+}
+
+func handleLongInputProtectionChange(cfg *Config) {
+	confirmLongInput := false
+	prompt := &survey.Confirm{
+		Message: "Enable confirmation prompt for long input? (Helps prevent accidental AI requests when pasting URLs or long text)",
+		Default: cfg.ConfirmLongInput,
+		Help:    "When enabled, you'll be asked to confirm before sending long text (>500 chars), URLs, or multi-line content to the AI.",
+	}
+	survey.AskOne(prompt, &confirmLongInput)
+	cfg.ConfirmLongInput = confirmLongInput
+	if err := saveConfig(cfg); err != nil {
+		ui.Errorln("Error saving config: %v", err)
+	} else {
+		ui.AIln("Long input protection set to: %t", confirmLongInput)
 	}
 }
 
