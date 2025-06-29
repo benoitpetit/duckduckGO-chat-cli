@@ -269,6 +269,7 @@ Enter your choice (1-5): 1
 | 📚 `/library [command] [args]`   | `/library add /path/to/docs` | Manage library directories for bulk file operations |
 | 🌐 `/url <link> [-- prompt]`     | `/url github.com/golang -- Summarize this page` | Add webpage content as context and optionally process it with a prompt  |
 | 📦 `/pmp [path] [options] [-- prompt]` | `/pmp . -i "*.go" -- analyze this codebase` | Generate structured project prompts with automatic PMP installation |
+| 📡 `/api [port]`         | `/api` or `/api 8080`    | Start or stop the API server    |
 | 🤖 `/model`          | `/model` or `/model 2`   | Change AI model (interactive)   |
 | 🧹 `/clear`          | `/clear`                 | Reset conversation context      |
 | 📤 `/export`         | `/export`                | Export content (interactive)    |
@@ -359,6 +360,8 @@ The `/copy` command offers quick clipboard operations:
 | `ExportDir`      | Export directory          | ~/Documents/duckchat | Any valid path     |
 | `ShowMenu`       | Display commands on start | true                 | true/false         |
 | `SearchSettings` | Search behavior config    | N/A                  | See below          |
+| `LibrarySettings`| Library behavior config   | N/A                  | See below          |
+| `APISettings`    | API server behavior config| N/A                  | See below          |
 
 ### 🔍 Search Settings
 
@@ -369,14 +372,23 @@ The `/copy` command offers quick clipboard operations:
 | `MaxRetries`     | Connection retry attempts | 3       | 1-5        |
 | `RetryDelay`     | Seconds between retries   | 1       | 1-10       |
 
-> 💡 **Tip:** Use `/config` to modify these settings interactively.
-
 ### 📚 Library Settings
 
 | Option           | Description               | Default | Range      |
 | ---------------- | ------------------------- | ------- | ---------- |
 | `Enabled`        | Enable library system     | true    | true/false |
 | `Directories`    | List of library paths     | []      | Array of paths |
+
+### 📡 API Settings
+
+| Option        | Description               | Default | Range           |
+|---------------|---------------------------|---------|-----------------|
+| `Enabled`     | Enable API server         | `false` | `true`/`false`  |
+| `Port`        | API server port           | `8080`  | Any valid port  |
+| `Autostart`   | Start API on app launch   | `false` | `true`/`false`  |
+| `LogRequests` | Log incoming API requests | `true`  | `true`/`false`  |
+
+> 💡 **Tip:** Use `/config` to modify these settings interactively.
 
 ### 📁 Configuration Files
 
@@ -404,6 +416,12 @@ The `/copy` command offers quick clipboard operations:
       "/path/to/docs",
       "/path/to/projects"
     ]
+  },
+  "api": {
+    "enabled": false,
+    "port": 8080,
+    "autostart": false,
+    "log_requests": true
   }
 }
 ```

@@ -23,9 +23,7 @@ import (
 	"duckduckgo-chat-cli/internal/ui"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/charmbracelet/glamour"
 	"github.com/fatih/color"
-	"golang.org/x/term"
 )
 
 type Chat struct {
@@ -230,40 +228,9 @@ func ProcessInput(c *Chat, input string, cfg *config.Config) {
 		return
 	}
 
+	// Use the new stable streaming renderer
 	modelName := shortenModelName(string(c.Model))
-	ui.AIf(modelName + ": ")
-
-	fmt.Print("\033[s") // Save cursor position
-
-	var responseBuffer strings.Builder
-	renderer, _ := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(getTerminalWidth()),
-	)
-
-	var lastRendered string
-	for chunk := range stream {
-		responseBuffer.WriteString(chunk)
-		currentText := responseBuffer.String()
-		if currentText != lastRendered {
-			fmt.Print("\033[u\033[J") // Restore cursor and clear from cursor down
-			out, _ := renderer.Render(currentText)
-			fmt.Print(out)
-			lastRendered = currentText
-		}
-	}
-
-	// Final render to clean up any formatting
-	fmt.Print("\033[u\033[J")
-	finalResponse := responseBuffer.String()
-	out, _ := renderer.Render(finalResponse)
-	fmt.Print(out)
-
-	if len(out) > 0 && !strings.HasSuffix(out, "\n") {
-		fmt.Println()
-	} else if len(out) == 0 {
-		fmt.Println()
-	}
+	finalResponse := RenderStream(stream, modelName)
 
 	c.Messages = append(c.Messages, Message{
 		Role:    "assistant",
@@ -309,14 +276,6 @@ func ProcessInputAndReturn(c *Chat, input string, cfg *config.Config) (string, e
 		Content: response,
 	})
 	return response, nil
-}
-
-func getTerminalWidth() int {
-	width, _, err := term.GetSize(int(os.Stdout.Fd()))
-	if err != nil {
-		return 80 // Default width
-	}
-	return width
 }
 
 func shortenModelName(model string) string {
@@ -540,6 +499,7 @@ func PrintWelcomeMessage() {
 		{"/copy", "Copy the last AI response to the clipboard"},
 		{"/export", "Export the conversation to a file"},
 		{"/version", "Show application version information"},
+		{"/api", "Start or stop the API server interactively"},
 	}
 
 	contextCommands := []CommandHelp{
