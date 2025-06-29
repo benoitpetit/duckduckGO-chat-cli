@@ -414,19 +414,21 @@ func handleAPIPortChange(cfg *Config) {
 }
 
 func handleLongInputProtectionChange(cfg *Config) {
-	confirmLongInput := false
+	confirmLongInput := cfg.ConfirmLongInput
 	prompt := &survey.Confirm{
-		Message: "Enable confirmation prompt for long input? (Helps prevent accidental AI requests when pasting URLs or long text)",
+		Message: "Enable Long Input Protection?",
 		Default: cfg.ConfirmLongInput,
 		Help:    "When enabled, you'll be asked to confirm before sending long text (>500 chars), URLs, or multi-line content to the AI.",
 	}
-	survey.AskOne(prompt, &confirmLongInput)
-	cfg.ConfirmLongInput = confirmLongInput
-	if err := saveConfig(cfg); err != nil {
-		ui.Errorln("Error saving config: %v", err)
-	} else {
-		ui.AIln("Long input protection set to: %t", confirmLongInput)
+	if err := survey.AskOne(prompt, &confirmLongInput); err != nil {
+		// If the user presses Ctrl+C, AskOne returns an error.
+		// We can interpret this as "no change".
+		ui.Warningln("Operation cancelled. No changes made.")
+		return
 	}
+
+	cfg.ConfirmLongInput = confirmLongInput
+	saveAndReport(cfg, fmt.Sprintf("Long input protection set to: %v", cfg.ConfirmLongInput))
 }
 
 func saveAndReport(cfg *Config, message string) {
