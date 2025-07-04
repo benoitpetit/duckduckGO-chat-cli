@@ -18,6 +18,7 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/c-bata/go-prompt"
+	"golang.org/x/term"
 )
 
 // Version will be set at build time via ldflags
@@ -25,6 +26,29 @@ var Version = "dev"
 
 var chatSession *chat.Chat
 var cfg *config.Config
+
+// Terminal state management
+var originalState *term.State
+
+// saveTerminalState saves the current terminal state for later restoration
+func saveTerminalState() error {
+	fd := int(os.Stdin.Fd())
+	state, err := term.GetState(fd)
+	if err != nil {
+		return err
+	}
+	originalState = state
+	return nil
+}
+
+// restoreTerminalState restores the terminal to its original state
+func restoreTerminalState() error {
+	if originalState != nil {
+		fd := int(os.Stdin.Fd())
+		return term.Restore(fd, originalState)
+	}
+	return nil
+}
 
 var commands = []prompt.Suggest{
 	{Text: "/help", Description: "Show the welcome message and command list"},
@@ -65,6 +89,19 @@ func completer(d prompt.Document) []prompt.Suggest {
 }
 
 func main() {
+	// Save the terminal state at startup
+	if err := saveTerminalState(); err != nil {
+		ui.Warningln("Warning: Could not save terminal state: %v", err)
+		// Continue execution even if we can't save state
+	}
+
+	// Ensure terminal state is restored when main function exits
+	defer func() {
+		if err := restoreTerminalState(); err != nil {
+			ui.Warningln("Warning: Could not restore terminal state: %v", err)
+		}
+	}()
+
 	// create a channel to listen for interrupts
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -72,6 +109,10 @@ func main() {
 	go func() {
 		<-sigChan
 		ui.Warningln("\nReceived interrupt. Exiting gracefully.")
+		// Restore terminal state before exiting
+		if err := restoreTerminalState(); err != nil {
+			ui.Warningln("Warning: Could not restore terminal state: %v", err)
+		}
 		os.Exit(0)
 	}()
 
@@ -114,6 +155,10 @@ func executor(input string) {
 	}
 	if input == "/exit" {
 		ui.Warningln("\nExiting chat. Goodbye!")
+		// Restore terminal state before exiting
+		if err := restoreTerminalState(); err != nil {
+			ui.Warningln("Warning: Could not restore terminal state: %v", err)
+		}
 		os.Exit(0)
 	}
 
