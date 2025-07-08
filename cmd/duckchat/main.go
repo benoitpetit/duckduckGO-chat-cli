@@ -66,6 +66,7 @@ var commands = []prompt.Suggest{
 	{Text: "/model", Description: "Change the chat model"},
 	{Text: "/version", Description: "Show version information"},
 	{Text: "/api", Description: "Start or stop the API server interactively"},
+	{Text: "/stats", Description: "Show real-time session analytics"},
 }
 
 func completer(d prompt.Document) []prompt.Suggest {
@@ -109,6 +110,12 @@ func main() {
 	go func() {
 		<-sigChan
 		ui.Warningln("\nReceived interrupt. Exiting gracefully.")
+
+		// Show session statistics before exiting
+		if chatSession != nil {
+			chatSession.ShowSessionStats()
+		}
+
 		// Restore terminal state before exiting
 		if err := restoreTerminalState(); err != nil {
 			ui.Warningln("Warning: Could not restore terminal state: %v", err)
@@ -155,11 +162,25 @@ func executor(input string) {
 	}
 	if input == "/exit" {
 		ui.Warningln("\nExiting chat. Goodbye!")
+
+		// Show session statistics before exiting
+		if chatSession != nil {
+			chatSession.ShowSessionStats()
+		}
+
 		// Restore terminal state before exiting
 		if err := restoreTerminalState(); err != nil {
 			ui.Warningln("Warning: Could not restore terminal state: %v", err)
 		}
 		os.Exit(0)
+	}
+
+	// Track command usage
+	if strings.HasPrefix(input, "/") {
+		command := strings.Fields(input)[0]
+		if chatSession != nil && chatSession.Analytics != nil {
+			chatSession.Analytics.RecordCommand(command)
+		}
 	}
 
 	chainedCmd, err := command.Parse(input)
@@ -281,6 +302,13 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, cmd *command.Comm
 		ui.AIln("DuckDuckGo AI Chat CLI version %s", Version)
 		ui.Mutedln("Go version: %s", runtime.Version())
 		ui.Mutedln("OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
+	case cmd.Type == "/stats":
+		// Show current session analytics
+		if chatSession != nil {
+			chatSession.ShowSessionStats()
+		} else {
+			ui.Errorln("No active chat session found.")
+		}
 	default:
 		// Check if the input is potentially pasted content (long text, URLs, etc.)
 		if cfg.ConfirmLongInput && shouldConfirmLongInput(cmd.Raw) {

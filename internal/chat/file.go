@@ -74,4 +74,8 @@ func (c *Chat) addFileContext(path string, content []byte) {
 		Role:    "user",
 		Content: fmt.Sprintf("[File Context]\nFile: %s\n\n%s", path, string(content)),
 	})
+
+	if c.Analytics != nil {
+		c.Analytics.RecordFileProcessed()
+	}
 }

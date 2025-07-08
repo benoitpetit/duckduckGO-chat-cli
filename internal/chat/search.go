@@ -70,6 +70,10 @@ func HandleSearchCommand(c *Chat, input string, cfg *config.Config, chainCtx *ch
 			Content: fmt.Sprintf("[Search Context]\n%s", contextMsg),
 		})
 
+		if c.Analytics != nil {
+			c.Analytics.RecordSearchPerformed()
+		}
+
 		color.Green("Added %d search results to the context", len(results))
 
 		// If user provided a specific request, process it with the search context
