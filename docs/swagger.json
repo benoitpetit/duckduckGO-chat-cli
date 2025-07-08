@@ -6,12 +6,12 @@
     "swagger": "2.0",
     "info": {
         "description": "REST API for DuckDuckGo Chat CLI - programmatic access to AI chat functionality",
-        "title": "DuckDuckGo Chat CLI API",
+        "title": "duckduckGO-chat-cli API",
         "termsOfService": "https://duckduckgo.com/terms",
         "contact": {
-            "name": "DuckDuckGo Chat CLI",
-            "url": "https://github.com/example/duckduckgo-chat-cli",
-            "email": "support@example.com"
+            "name": "devbyben",
+            "url": "https://github.com/benoitpetit/duckduckGO-chat-cli",
+            "email": "contact@devbyben.fr"
         },
         "license": {
             "name": "MIT",

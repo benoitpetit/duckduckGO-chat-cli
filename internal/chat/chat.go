@@ -19,6 +19,7 @@ import (
 
 	"duckduckgo-chat-cli/internal/analytics"
 	"duckduckgo-chat-cli/internal/chatcontext"
+	"duckduckgo-chat-cli/internal/command"
 	"duckduckgo-chat-cli/internal/config"
 	"duckduckgo-chat-cli/internal/intelligence"
 	"duckduckgo-chat-cli/internal/models"
@@ -595,28 +596,41 @@ func PrintWelcomeMessage() {
 	ui.Systemln("\nDuckDuckGo AI Chat CLI - Help")
 	ui.Mutedln("---------------------------------")
 
-	coreCommands := []CommandHelp{
-		{"/help", "Show this help message"},
-		{"/exit", "Exit the application"},
-		{"/clear", "Clear the current chat session and context"},
-		{"/history", "Display the conversation history"},
-		{"/model", "Change the AI model interactively"},
-		{"/config", "Open the interactive configuration menu"},
-		{"/copy", "Copy the last AI response to the clipboard"},
-		{"/export", "Export the conversation to a file"},
-		{"/version", "Show application version information"},
-		{"/api", "Start or stop the API server interactively"},
-		{"/stats", "Show real-time session analytics"},
+	// Get commands from centralized registry
+	commandsByCategory := command.GetCommandsByCategory()
+
+	// Core commands
+	coreCommands := []CommandHelp{}
+	for _, cmd := range commandsByCategory["core"] {
+		coreCommands = append(coreCommands, CommandHelp{
+			Command:     cmd.Name,
+			Description: cmd.Description,
+		})
 	}
 
-	contextCommands := []CommandHelp{
-		{"/search <query>", "Search the web and add results to context"},
-		{"/file <path>", "Add the content of a local file to context"},
-		{"/url <url>", "Add the content of a webpage to context"},
-		{"/library", "Manage and use your local document library"},
-		{"/pmp", "Use Pre-Made Prompts for structured generation"},
+	// Context commands
+	contextCommands := []CommandHelp{}
+	for _, cmd := range commandsByCategory["context"] {
+		usage := cmd.Usage
+		if usage == cmd.Name {
+			usage = cmd.Name // Use simple name if no special usage
+		}
+		contextCommands = append(contextCommands, CommandHelp{
+			Command:     usage,
+			Description: cmd.Description,
+		})
 	}
 
+	// Productivity commands
+	productivityCommands := []CommandHelp{}
+	for _, cmd := range commandsByCategory["productivity"] {
+		productivityCommands = append(productivityCommands, CommandHelp{
+			Command:     cmd.Name,
+			Description: cmd.Description,
+		})
+	}
+
+	// API documentation (static)
 	apiCommands := []CommandHelp{
 		{"GET /", "Shows API documentation"},
 		{"POST /chat", "Sends a message to the chat"},
@@ -628,6 +642,9 @@ func PrintWelcomeMessage() {
 
 	ui.AIln("\nContext Commands:")
 	printCommandsTable(contextCommands)
+
+	ui.AIln("\nProductivity Commands:")
+	printCommandsTable(productivityCommands)
 
 	ui.AIln("\nAPI Documentation:")
 	printCommandsTable(apiCommands)

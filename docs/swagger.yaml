@@ -166,15 +166,15 @@ definitions:
 host: localhost:8080
 info:
   contact:
-    email: support@example.com
-    name: DuckDuckGo Chat CLI
-    url: https://github.com/example/duckduckgo-chat-cli
+    email: contact@devbyben.fr
+    name: devbyben
+    url: https://github.com/benoitpetit/duckduckGO-chat-cli
   description: REST API for DuckDuckGo Chat CLI - programmatic access to AI chat functionality
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
   termsOfService: https://duckduckgo.com/terms
-  title: DuckDuckGo Chat CLI API
+  title: duckduckGO-chat-cli API
   version: 1.0.0
 paths:
   /chat:

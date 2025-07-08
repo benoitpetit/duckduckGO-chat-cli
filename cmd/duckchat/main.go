@@ -15,6 +15,7 @@ import (
 	"duckduckgo-chat-cli/internal/config"
 	"duckduckgo-chat-cli/internal/models"
 	"duckduckgo-chat-cli/internal/ui"
+	"duckduckgo-chat-cli/internal/update"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/c-bata/go-prompt"
@@ -50,24 +51,22 @@ func restoreTerminalState() error {
 	return nil
 }
 
-var commands = []prompt.Suggest{
-	{Text: "/help", Description: "Show the welcome message and command list"},
-	{Text: "/exit", Description: "Exit the chat"},
-	{Text: "/clear", Description: "Clear the chat history"},
-	{Text: "/history", Description: "Show the chat history"},
-	{Text: "/search", Description: "Search with a query"},
-	{Text: "/file", Description: "Chat with a file"},
-	{Text: "/library", Description: "Chat with your library"},
-	{Text: "/url", Description: "Chat with a URL"},
-	{Text: "/pmp", Description: "Use a predefined prompt"},
-	{Text: "/export", Description: "Export the chat history"},
-	{Text: "/copy", Description: "Copy the last response to the clipboard"},
-	{Text: "/config", Description: "Open the configuration menu"},
-	{Text: "/model", Description: "Change the chat model"},
-	{Text: "/version", Description: "Show version information"},
-	{Text: "/api", Description: "Start or stop the API server interactively"},
-	{Text: "/stats", Description: "Show real-time session analytics"},
+// getCommands returns the command suggestions for autocompletion
+func getCommands() []prompt.Suggest {
+	registry := command.GetCommandRegistry()
+	commands := make([]prompt.Suggest, 0, len(registry.Commands))
+
+	for _, cmd := range registry.Commands {
+		commands = append(commands, prompt.Suggest{
+			Text:        cmd.Name,
+			Description: cmd.Description,
+		})
+	}
+
+	return commands
 }
+
+var commands = getCommands()
 
 func completer(d prompt.Document) []prompt.Suggest {
 	text := d.TextBeforeCursor()
@@ -138,6 +137,9 @@ func main() {
 	if cfg.API.Enabled && cfg.API.Autostart {
 		api.StartServer(chatSession, cfg, cfg.API.Port)
 	}
+
+	// Check for updates at startup
+	update.CheckForUpdatesAtStartup(Version)
 
 	if cfg.ShowMenu {
 		chat.PrintWelcomeMessage()
@@ -308,6 +310,12 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, cmd *command.Comm
 			chatSession.ShowSessionStats()
 		} else {
 			ui.Errorln("No active chat session found.")
+		}
+	case cmd.Type == "/update":
+		// Handle update command
+		force := strings.Contains(cmd.Args, "--force")
+		if err := update.HandleUpdateCommand(Version, force); err != nil {
+			ui.Errorln("Update failed: %v", err)
 		}
 	default:
 		// Check if the input is potentially pasted content (long text, URLs, etc.)

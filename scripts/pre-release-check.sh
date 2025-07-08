@@ -97,6 +97,35 @@ log_info "Checking documentation..."
 check "grep -q 'v[0-9]\+\.[0-9]\+\.[0-9]\+' README.md" "Version mentioned in README.md"
 check "[ -f .github/RELEASE_WORKFLOW.md ]" "Workflow documentation present"
 
+# API Documentation verification
+log_info "Checking API documentation..."
+if command -v swag >/dev/null 2>&1; then
+    # Check if documentation can be generated without errors
+    check "swag init --generalInfo internal/api/docs.go --output /tmp/docs_test --parseInternal >/dev/null 2>&1 && rm -rf /tmp/docs_test" "API documentation generates without errors"
+    
+    # Check if current documentation is up-to-date
+    if [ -f "docs/docs.go" ] && [ -f "docs/swagger.json" ] && [ -f "docs/swagger.yaml" ]; then
+        # Generate fresh docs in temp directory and compare
+        mkdir -p /tmp/docs_check
+        swag init --generalInfo internal/api/docs.go --output /tmp/docs_check --parseInternal >/dev/null 2>&1
+        
+        if cmp -s "docs/swagger.json" "/tmp/docs_check/swagger.json"; then
+            check "true" "API documentation is up-to-date"
+        else
+            log_warning "API documentation may be outdated. Run: ./scripts/generate-docs.sh"
+            check "false" "API documentation is up-to-date"
+        fi
+        
+        rm -rf /tmp/docs_check
+    else
+        check "false" "API documentation files present"
+    fi
+else
+    log_warning "swag not installed. Install with: go install github.com/swaggo/swag/cmd/swag@latest"
+    CHECKS_TOTAL=$((CHECKS_TOTAL + 1))
+    CHECKS_PASSED=$((CHECKS_PASSED + 1))
+fi
+
 # Optional check: golangci-lint
 if command -v golangci-lint >/dev/null 2>&1; then
     log_info "Checking with golangci-lint..."

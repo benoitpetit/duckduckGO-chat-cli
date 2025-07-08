@@ -10,14 +10,14 @@
 //
 // All responses follow a consistent format with success/error indicators and standardized error codes.
 //
-//	@title						DuckDuckGo Chat CLI API
+//	@title						duckduckGO-chat-cli API
 //	@version					1.0.0
 //	@description				REST API for DuckDuckGo Chat CLI - programmatic access to AI chat functionality
 //	@termsOfService				https://duckduckgo.com/terms
 //
-//	@contact.name				DuckDuckGo Chat CLI
-//	@contact.url				https://github.com/example/duckduckgo-chat-cli
-//	@contact.email				support@example.com
+//	@contact.name				devbyben
+//	@contact.url				https://github.com/benoitpetit/duckduckGO-chat-cli
+//	@contact.email				contact@devbyben.fr
 //
 //	@license.name				MIT
 //	@license.url				https://opensource.org/licenses/MIT
@@ -44,6 +44,6 @@
 //	@tag.name					Session
 //	@tag.description			Session management and information
 //
-//	@externalDocs.description	DuckDuckGo Chat CLI Documentation
-//	@externalDocs.url			https://github.com/example/duckduckgo-chat-cli/blob/main/README.md
+//	@externalDocs.description	duckduckGO-chat-cli Documentation
+//	@externalDocs.url			https://github.com/benoitpetit/duckduckGO-chat-cli/blob/main/README.md
 package api

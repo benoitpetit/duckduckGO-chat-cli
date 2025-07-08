@@ -11,9 +11,9 @@ const docTemplate = `{
         "title": "{{.Title}}",
         "termsOfService": "https://duckduckgo.com/terms",
         "contact": {
-            "name": "DuckDuckGo Chat CLI",
-            "url": "https://github.com/example/duckduckgo-chat-cli",
-            "email": "support@example.com"
+            "name": "devbyben",
+            "url": "https://github.com/benoitpetit/duckduckGO-chat-cli",
+            "email": "contact@devbyben.fr"
         },
         "license": {
             "name": "MIT",
@@ -582,7 +582,7 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "localhost:8080",
 	BasePath:         "/api/v1",
 	Schemes:          []string{"http", "https"},
-	Title:            "DuckDuckGo Chat CLI API",
+	Title:            "duckduckGO-chat-cli API",
 	Description:      "REST API for DuckDuckGo Chat CLI - programmatic access to AI chat functionality",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,

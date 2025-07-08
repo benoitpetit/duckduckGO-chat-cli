@@ -6,25 +6,168 @@ import (
 	"strings"
 )
 
+// CommandRegistry holds all CLI commands with their metadata
+type CommandRegistry struct {
+	Commands map[string]CommandInfo
+}
+
+// CommandInfo holds metadata about a command
+type CommandInfo struct {
+	Name         string
+	Description  string
+	Usage        string
+	IsChainable  bool
+	RequiresArgs bool
+	Category     string
+}
+
+// GetCommandRegistry returns the centralized command registry
+func GetCommandRegistry() *CommandRegistry {
+	return &CommandRegistry{
+		Commands: map[string]CommandInfo{
+			"/help": {
+				Name:        "/help",
+				Description: "Show the welcome message and command list",
+				Usage:       "/help",
+				Category:    "core",
+			},
+			"/exit": {
+				Name:        "/exit",
+				Description: "Exit the chat",
+				Usage:       "/exit",
+				Category:    "core",
+			},
+			"/clear": {
+				Name:        "/clear",
+				Description: "Clear the chat history",
+				Usage:       "/clear",
+				Category:    "core",
+			},
+			"/history": {
+				Name:        "/history",
+				Description: "Show the chat history",
+				Usage:       "/history",
+				Category:    "core",
+			},
+			"/search": {
+				Name:         "/search",
+				Description:  "Search with a query",
+				Usage:        "/search <query> [-- prompt]",
+				IsChainable:  true,
+				RequiresArgs: true,
+				Category:     "context",
+			},
+			"/file": {
+				Name:         "/file",
+				Description:  "Chat with a file",
+				Usage:        "/file <path> [-- prompt]",
+				IsChainable:  true,
+				RequiresArgs: false, // Can be used without args for file browser
+				Category:     "context",
+			},
+			"/library": {
+				Name:         "/library",
+				Description:  "Chat with your library",
+				Usage:        "/library [command] [args] [-- prompt]",
+				IsChainable:  true,
+				RequiresArgs: false,
+				Category:     "context",
+			},
+			"/url": {
+				Name:         "/url",
+				Description:  "Chat with a URL",
+				Usage:        "/url <url> [-- prompt]",
+				IsChainable:  true,
+				RequiresArgs: true,
+				Category:     "context",
+			},
+			"/pmp": {
+				Name:        "/pmp",
+				Description: "Use a predefined prompt",
+				Usage:       "/pmp [path] [options] [-- prompt]",
+				Category:    "context",
+			},
+			"/export": {
+				Name:        "/export",
+				Description: "Export the chat history",
+				Usage:       "/export",
+				Category:    "productivity",
+			},
+			"/copy": {
+				Name:        "/copy",
+				Description: "Copy the last response to the clipboard",
+				Usage:       "/copy",
+				Category:    "productivity",
+			},
+			"/config": {
+				Name:        "/config",
+				Description: "Open the configuration menu",
+				Usage:       "/config",
+				Category:    "core",
+			},
+			"/model": {
+				Name:        "/model",
+				Description: "Change the chat model",
+				Usage:       "/model [model_name]",
+				Category:    "core",
+			},
+			"/version": {
+				Name:        "/version",
+				Description: "Show version information",
+				Usage:       "/version",
+				Category:    "core",
+			},
+			"/api": {
+				Name:        "/api",
+				Description: "Start or stop the API server interactively",
+				Usage:       "/api [port]",
+				Category:    "core",
+			},
+			"/stats": {
+				Name:        "/stats",
+				Description: "Show real-time session analytics",
+				Usage:       "/stats",
+				Category:    "core",
+			},
+			"/update": {
+				Name:        "/update",
+				Description: "Update the CLI to the latest version",
+				Usage:       "/update [--force]",
+				Category:    "core",
+			},
+		},
+	}
+}
+
 // GetSupportedCommands returns a list of all supported commands
 func GetSupportedCommands() []string {
-	return []string{
-		"/help", "/exit", "/clear", "/history", "/search", "/file",
-		"/library", "/url", "/pmp", "/export", "/copy", "/config",
-		"/model", "/version", "/api", "/stats",
+	registry := GetCommandRegistry()
+	commands := make([]string, 0, len(registry.Commands))
+	for cmdName := range registry.Commands {
+		commands = append(commands, cmdName)
 	}
+	return commands
+}
+
+// GetCommandsByCategory returns commands grouped by category
+func GetCommandsByCategory() map[string][]CommandInfo {
+	registry := GetCommandRegistry()
+	categories := make(map[string][]CommandInfo)
+
+	for _, cmd := range registry.Commands {
+		categories[cmd.Category] = append(categories[cmd.Category], cmd)
+	}
+
+	return categories
 }
 
 // IsChainableCommand checks if a command can be used in a chain
 func IsChainableCommand(cmdType string) bool {
-	chainableCommands := map[string]bool{
-		"/search":  true,
-		"/file":    true,
-		"/url":     true,
-		"/library": true,
+	registry := GetCommandRegistry()
+	if cmd, exists := registry.Commands[cmdType]; exists {
+		return cmd.IsChainable
 	}
-
-	return chainableCommands[cmdType]
+	return false
 }
 
 // ExtractArguments extracts arguments from a command using regex patterns
@@ -118,6 +261,10 @@ func ValidateCommand(cmd *Command) error {
 	case "/stats":
 		// Stats command doesn't need validation
 		break
+
+	case "/update":
+		// Update command doesn't need validation
+		break
 	}
 
 	return nil
@@ -154,24 +301,7 @@ func FormatChainedCommand(chainedCmd *ChainedCommand) string {
 
 // IsValidCommand checks if a command type is valid
 func IsValidCommand(cmdType string) bool {
-	validCommands := map[string]bool{
-		"/help":    true,
-		"/exit":    true,
-		"/clear":   true,
-		"/history": true,
-		"/search":  true,
-		"/file":    true,
-		"/library": true,
-		"/url":     true,
-		"/pmp":     true,
-		"/export":  true,
-		"/copy":    true,
-		"/config":  true,
-		"/model":   true,
-		"/version": true,
-		"/api":     true,
-		"/stats":   true, // New command for analytics
-	}
-
-	return validCommands[cmdType]
+	registry := GetCommandRegistry()
+	_, exists := registry.Commands[cmdType]
+	return exists
 }

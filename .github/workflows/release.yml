@@ -79,6 +79,16 @@ jobs:
         fi
         echo "✅ Version v$VERSION is available"
 
+    - name: 📚 Generate API documentation
+      run: |
+        echo "📚 Installing swag for documentation generation..."
+        go install github.com/swaggo/swag/cmd/swag@latest
+        
+        echo "📚 Generating API documentation..."
+        swag init --generalInfo internal/api/docs.go --output docs/ --parseInternal
+        
+        echo "✅ API documentation generated successfully"
+
     - name: 🗑️ Delete remote tag if it exists (for re-runs)
       run: |
         VERSION="${{ steps.version.outputs.VERSION }}"

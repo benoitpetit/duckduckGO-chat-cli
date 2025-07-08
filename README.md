@@ -268,6 +268,7 @@ Enter your choice: 2
 | 📚 `/history`        | `/history`               | Display conversation history    |
 | ⚙️ `/config`         | `/config`                | Modify configuration settings   |
 | 🏷️ `/version`        | `/version`               | Show version and system info    |
+| 🔄 `/update`         | `/update` or `/update --force` | Update the CLI to the latest version |
 | ❓ `/help`           | `/help`                  | Show available commands         |
 | 🚪 `/exit`           | `/exit`                  | Exit application (with analytics) |
 
@@ -306,6 +307,42 @@ Enter your choice: 2
 | `Autostart`   | Start API on app launch   | `false` | `true`/`false`  |
 
 > 💡 **Tip:** Use `/config` to modify these settings interactively.
+
+## 🔄 Auto-Update System
+
+The CLI includes an integrated update system that keeps your installation current:
+
+### 📥 Update Features
+
+- **🔍 Automatic Check:** Checks for new versions every 24 hours at startup
+- **🔐 SHA256 Verification:** Verifies downloaded binaries for security
+- **🎯 Cross-Platform:** Works on Linux, Windows, and macOS
+- **⚡ In-Place Update:** Updates the current binary without changing location
+- **🔄 Backup & Restore:** Creates backups and restores on failure
+
+### 🎯 Usage
+
+```bash
+# Check for updates and install (with confirmation)
+/update
+
+# Force update without confirmation
+/update --force
+
+# The CLI will also prompt you when updates are available:
+🆕 A new version is available!
+   Current: 1.2.3
+   Latest:  1.2.4
+💡 Run '/update' to update to the latest version.
+```
+
+### 🔧 Update Process
+
+1. **Detection:** Detects your OS and architecture automatically
+2. **Download:** Downloads the correct binary from GitHub releases
+3. **Verification:** Verifies SHA256 checksum for security
+4. **Installation:** Replaces the current binary with the new version
+5. **Restart:** Prompts you to restart the CLI to use the new version
 
 ## 🛠️ Development & Contributing
 

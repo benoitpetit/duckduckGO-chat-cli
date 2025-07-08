@@ -19,6 +19,7 @@ type StreamRenderer struct {
 	modelName      string
 	contentStarted bool
 	linesDisplayed int
+	currentColumn  int
 }
 
 // NewStreamRenderer creates a new streaming renderer
@@ -57,6 +58,7 @@ func NewStreamRenderer(modelName string) (*StreamRenderer, error) {
 		modelName:      modelName,
 		contentStarted: false,
 		linesDisplayed: 0,
+		currentColumn:  0,
 	}, nil
 }
 
@@ -93,15 +95,12 @@ func (sr *StreamRenderer) ProcessStream(stream <-chan string) string {
 	contentStarted := false
 	lastSpinnerUpdate := time.Now()
 
-	// Save cursor position when content starts
-	var cursorSaved bool
-
 	for {
 		select {
 		case chunk, ok := <-stream:
 			if !ok {
 				// Stream finished - replace raw content with formatted version
-				sr.replaceWithFormattedContent(finalContent.String(), cursorSaved, contentStarted)
+				sr.replaceWithFormattedContent(finalContent.String(), contentStarted)
 				return finalContent.String()
 			}
 
@@ -112,15 +111,24 @@ func (sr *StreamRenderer) ProcessStream(stream <-chan string) string {
 				fmt.Print("\r\033[K") // Clear spinner line
 				color.New(color.FgHiGreen, color.Bold).Printf("%s: ", sr.modelName)
 				fmt.Print("\n") // Start content on a new line for consistency
-				// Save cursor position right before content starts
-				fmt.Print("\033[s") // Save cursor position
-				cursorSaved = true
 				contentStarted = true
 				sr.linesDisplayed++ // Account for the newline we just added
+				sr.currentColumn = 0
 			}
 
-			// Count lines displayed for proper cleanup later
-			sr.linesDisplayed += strings.Count(chunk, "\n")
+			// Count lines displayed for proper cleanup later, including wraps
+			for _, r := range chunk {
+				if r == '\n' {
+					sr.linesDisplayed++
+					sr.currentColumn = 0
+				} else {
+					sr.currentColumn++
+					if sr.terminalWidth > 0 && sr.currentColumn > sr.terminalWidth {
+						sr.linesDisplayed++
+						sr.currentColumn = 1
+					}
+				}
+			}
 
 			// Display raw content in real-time
 			fmt.Print(chunk)
@@ -140,17 +148,21 @@ func (sr *StreamRenderer) ProcessStream(stream <-chan string) string {
 }
 
 // replaceWithFormattedContent clears the raw content and displays the formatted version
-func (sr *StreamRenderer) replaceWithFormattedContent(content string, cursorSaved bool, contentStarted bool) {
+func (sr *StreamRenderer) replaceWithFormattedContent(content string, contentStarted bool) {
 	if content == "" {
 		fmt.Println()
 		return
 	}
 
 	// Only perform cleanup if content was actually displayed
-	if contentStarted && cursorSaved {
-		// Restore cursor to the position saved right before the raw stream started
-		fmt.Print("\033[u")
-		// Clear everything from the restored cursor position to the end of the screen
+	if contentStarted {
+		// Move cursor up by the number of lines displayed
+		if sr.linesDisplayed > 0 {
+			fmt.Printf("\033[%dA", sr.linesDisplayed)
+		}
+		// Go to the beginning of the line
+		fmt.Print("\r")
+		// Clear everything from the cursor position to the end of the screen
 		fmt.Print("\033[J")
 
 		// Reprint model name and start content on new line for consistency
