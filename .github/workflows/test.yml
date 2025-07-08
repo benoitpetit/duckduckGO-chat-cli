@@ -45,6 +45,32 @@ jobs:
     - name: 🔬 Run go vet
       run: go vet ./...
 
+    - name: 📚 Generate and validate API documentation
+      run: |
+        echo "📚 Installing swag for documentation generation..."
+        go install github.com/swaggo/swag/cmd/swag@latest
+        
+        echo "📚 Generating API documentation..."
+        swag init --generalInfo internal/api/docs.go --output docs/ --parseInternal
+        
+        echo "📚 Validating generated documentation..."
+        if [ ! -f "docs/docs.go" ]; then
+          echo "❌ docs.go not generated"
+          exit 1
+        fi
+        
+        if [ ! -f "docs/swagger.json" ]; then
+          echo "❌ swagger.json not generated"
+          exit 1
+        fi
+        
+        if [ ! -f "docs/swagger.yaml" ]; then
+          echo "❌ swagger.yaml not generated"
+          exit 1
+        fi
+        
+        echo "✅ API documentation generated and validated successfully"
+
     - name: 🧪 Run tests
       run: go test -v ./...
 

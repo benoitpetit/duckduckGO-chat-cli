@@ -27,6 +27,10 @@ rm -rf $BUILD_DIR/*
 
 echo "🚀 Building DuckDuckGo Chat CLI v$VERSION..."
 
+# Génération de la documentation API
+echo "📚 Generating API documentation..."
+./scripts/generate-docs.sh
+
 # Build pour Linux
 echo "📦 Building Linux AMD64..."
 GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=v$VERSION" -o $BUILD_DIR/duckduckgo-chat-cli_v${VERSION}_linux_amd64 ./cmd/duckchat/main.go

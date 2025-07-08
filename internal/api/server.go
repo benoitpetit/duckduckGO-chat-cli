@@ -2,17 +2,24 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"duckduckgo-chat-cli/internal/chat"
 	"duckduckgo-chat-cli/internal/config"
 	"duckduckgo-chat-cli/internal/ui"
+
+	"github.com/gin-gonic/gin"
+	swaggerfiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	_ "duckduckgo-chat-cli/docs" // Import generated swagger docs
 )
 
 var server *http.Server
+var router *gin.Engine
 
 // IsRunning checks if the API server is currently active.
 func IsRunning() bool {
@@ -26,16 +33,26 @@ func StartServer(chatSession *chat.Chat, cfg *config.Config, port int) {
 		return
 	}
 
-	mux := http.NewServeMux()
-	registerRoutes(mux, chatSession, cfg)
+	// Set Gin mode based on environment
+	if os.Getenv("DEBUG") != "true" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	router = setupRouter(chatSession, cfg)
 
 	server = &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: mux,
+		Addr:         fmt.Sprintf(":%d", port),
+		Handler:      router,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	go func() {
-		ui.Systemln("Starting API server on port %d", port)
+		ui.Systemln("Starting enhanced API server on port %d", port)
+		ui.Systemln("API Documentation available at: http://localhost:%d/doc/index.html", port)
+		ui.Systemln("API Base URL: http://localhost:%d/api/v1", port)
+
 		if err := server.ListenAndServe(); err != http.ErrServerClosed {
 			ui.Errorln("API server error: %v", err)
 			server = nil
@@ -60,101 +77,68 @@ func StopServer() {
 		ui.Systemln("API server stopped.")
 	}
 	server = nil
+	router = nil
 }
 
-func registerRoutes(mux *http.ServeMux, chatSession *chat.Chat, cfg *config.Config) {
-	mux.HandleFunc("/", documentationHandler)
-	mux.HandleFunc("/chat", chatHandler(chatSession, cfg))
-	mux.HandleFunc("/history", historyHandler(chatSession))
-	// Add more routes here as needed
-}
+// setupRouter configures the Gin router with all routes and middleware
+func setupRouter(chatSession *chat.Chat, cfg *config.Config) *gin.Engine {
+	router := gin.New()
 
-func documentationHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
+	// Add middleware conditionally
+	if cfg.API.ShowGinLogs {
+		router.Use(gin.Logger())
 	}
+	router.Use(gin.Recovery())
+	router.Use(corsMiddleware())
 
-	w.Header().Set("Content-Type", "application/json")
-	doc := map[string]interface{}{
-		"message": "DuckDuckGo Chat CLI API",
-		"endpoints": []map[string]string{
-			{
-				"path":        "/",
-				"method":      "GET",
-				"description": "Shows this API documentation.",
-			},
-			{
-				"path":        "/chat",
-				"method":      "POST",
-				"description": "Send a message to the chat and get the AI's response back.",
-				"body":        `{"message": "your message here"}`,
-			},
-			{
-				"path":        "/history",
-				"method":      "GET",
-				"description": "Retrieves the current chat session history.",
-			},
-		},
-	}
-	json.NewEncoder(w).Encode(doc)
-}
-
-func chatHandler(chatSession *chat.Chat, cfg *config.Config) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		var requestBody struct {
-			Message string `json:"message"`
-		}
-
-		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
-			http.Error(w, "Invalid request body", http.StatusBadRequest)
-			return
-		}
-
-		if requestBody.Message == "" {
-			http.Error(w, "Message cannot be empty", http.StatusBadRequest)
-			return
-		}
-
-		// Process the input and get the response back
-		response, err := chat.ProcessInputAndReturn(chatSession, requestBody.Message, cfg)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Error processing chat: %v", err), http.StatusInternalServerError)
-			return
-		}
-
-		// If logging is enabled, print to the console
-		if cfg.API.LogRequests {
-			ui.APILog("Received message: '%s'", requestBody.Message)
-			// The full response can be long, so let's log a snippet
-			responseSnippet := response
-			if len(responseSnippet) > 100 {
-				responseSnippet = responseSnippet[:100] + "..."
-			}
-			ui.APILog("Sending response snippet: '%s'", responseSnippet)
-		}
-
-		// Return the response to the API client
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"response": response,
+	// API root with basic info
+	router.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "DuckDuckGo Chat CLI API",
+			"version": "1.0.0",
+			"docs":    "/doc/index.html",
+			"api":     "/api/v1",
 		})
+	})
+
+	// Swagger documentation route
+	router.GET("/doc/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
+
+	// API v1 routes
+	v1 := router.Group("/api/v1")
+	{
+		// Chat endpoints
+		v1.POST("/chat", ChatHandler(chatSession, cfg))
+		v1.GET("/history", HistoryHandler(chatSession))
+		v1.DELETE("/history", ClearHistoryHandler(chatSession, cfg))
+
+		// Model endpoints
+		v1.GET("/models", ModelsHandler(chatSession))
+		v1.POST("/models", ModelChangeHandler(chatSession))
+
+		// Session endpoints
+		v1.GET("/session", SessionInfoHandler(chatSession))
+
+		// Health endpoint
+		v1.GET("/health", HealthHandler())
 	}
+
+	return router
 }
 
-func historyHandler(chatSession *chat.Chat) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "Only GET method is allowed", http.StatusMethodNotAllowed)
+// corsMiddleware adds CORS headers to allow cross-origin requests
+func corsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(chatSession.Messages)
+		c.Next()
 	}
 }

@@ -441,6 +441,10 @@ func handleLibraryLoad(c *Chat, cfg *config.Config, argument string, userRequest
 			Content: fmt.Sprintf("[File Context]\nFile: %s\n\n%s", file, string(content)),
 		})
 		totalChars += len(content)
+
+		if c.Analytics != nil {
+			c.Analytics.RecordFileProcessed()
+		}
 	}
 
 	ui.AIln("✅ Added %d files (%d characters) to context.", len(files), totalChars)

@@ -34,6 +34,7 @@ type APIConfig struct {
 	Port        int  `json:"port"`
 	Autostart   bool `json:"autostart"`
 	LogRequests bool `json:"log_requests"`
+	ShowGinLogs bool `json:"show_gin_logs"`
 }
 
 type Config struct {
@@ -73,11 +74,17 @@ func Initialize() *Config {
 		cfg.Library.Enabled = true // default to enabled
 	}
 
-	// Initialize API config with defaults
+	// Initialize API config with defaults - check if config file exists first
+	configExists := configFileExists()
 	if cfg.API.Port == 0 {
 		cfg.API.Port = 8080 // default port
 	}
-	cfg.API.LogRequests = true // default to true
+
+	// Only set defaults if no config file exists (first run) or if explicitly not set
+	if !configExists {
+		cfg.API.LogRequests = true // default to true for new installs
+		cfg.API.ShowGinLogs = true // default to true for new installs
+	}
 
 	if err := ensureExportDir(cfg); err != nil {
 		ui.Warningln("Warning: Failed to create export directory: %v", err)
@@ -120,6 +127,12 @@ func configPath() string {
 		}
 	}
 	return filepath.Join(configDir, "duckduckgo-chat-cli", "config.json")
+}
+
+// configFileExists checks if the configuration file exists
+func configFileExists() bool {
+	_, err := os.Stat(configPath())
+	return err == nil
 }
 
 func ensureExportDir(cfg *Config) error {
@@ -373,6 +386,7 @@ func handleAPISettings(cfg *Config) {
 				fmt.Sprintf("Port (%d)", cfg.API.Port),
 				fmt.Sprintf("Autostart on launch (%t)", cfg.API.Autostart),
 				fmt.Sprintf("Log API Requests (%t)", cfg.API.LogRequests),
+				fmt.Sprintf("Show GIN Logs (%t)", cfg.API.ShowGinLogs),
 				"Back",
 			},
 			Default: "Back",
@@ -391,6 +405,9 @@ func handleAPISettings(cfg *Config) {
 		case strings.HasPrefix(choice, "Log API Requests"):
 			cfg.API.LogRequests = !cfg.API.LogRequests
 			saveAndReport(cfg, fmt.Sprintf("API Request Logging set to: %t", cfg.API.LogRequests))
+		case strings.HasPrefix(choice, "Show GIN Logs"):
+			cfg.API.ShowGinLogs = !cfg.API.ShowGinLogs
+			saveAndReport(cfg, fmt.Sprintf("GIN Logs visibility set to: %t", cfg.API.ShowGinLogs))
 		case choice == "Back":
 			return
 		}

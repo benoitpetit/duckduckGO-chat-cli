@@ -79,6 +79,24 @@ jobs:
         fi
         echo "✅ Version v$VERSION is available"
 
+    - name: 📚 Generate API documentation
+      run: |
+        echo "📚 Installing swag for documentation generation..."
+        go install github.com/swaggo/swag/cmd/swag@latest
+        
+        echo "📚 Generating API documentation..."
+        swag init --generalInfo internal/api/docs.go --output docs/ --parseInternal
+        
+        echo "✅ API documentation generated successfully"
+
+    - name: 🗑️ Delete remote tag if it exists (for re-runs)
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+          echo "⚠️ Tag v$VERSION already exists remotely. Deleting it to re-run workflow."
+          git push --delete origin "v$VERSION"
+        fi
+
     - name: 📦 Build binaries
       run: |
         VERSION="${{ steps.version.outputs.VERSION }}"
@@ -232,7 +250,7 @@ jobs:
         EOF
         
         git tag -a "v$VERSION" -F tag_message.txt
-        git push origin "v$VERSION"
+        git push --force origin "v$VERSION"
         
         rm tag_message.txt
 
