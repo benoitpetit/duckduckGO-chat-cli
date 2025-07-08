@@ -1,7 +1,7 @@
 # 🦆 DuckDuckGo AI Chat CLI
 
 <p align="center">
-  <img src="logo.png" width="220" alt="DuckDuckGo AI Chat CLI Logo">
+  <img src="logobig.png" width="800" alt="DuckDuckGo AI Chat CLI Logo">
   <br>
   <strong>🚀 A powerful CLI tool to interact with DuckDuckGo's AI</strong><br>
   <em>Advanced context integration, multi-models and enhanced productivity</em><br>
@@ -393,4 +393,14 @@ DEBUG=true ./duckduckgo-chat-cli_linux_amd64
 
 *🔧 This is an unofficial client and not affiliated with or endorsed by DuckDuckGo*
 
-> **Made with ♥ for the community**
+<p align="center">
+  <table width="100%"">
+    <tr>
+      <td align="center" style="border: 1px solid #6ed04c; padding: 20px;">
+        <strong>Made with ♥ for the community</strong>
+        <br>
+        <img src="logo.png" width="150" alt="DuckDuckGo AI Chat CLI Logo">
+      </td>
+    </tr>
+  </table>
+</p>
