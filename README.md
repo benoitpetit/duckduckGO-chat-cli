@@ -331,8 +331,8 @@ The CLI includes an integrated update system that keeps your installation curren
 
 # The CLI will also prompt you when updates are available:
 🆕 A new version is available!
-   Current: 1.2.3
-   Latest:  1.2.4
+   Current: 1.1.9
+   Latest:  1.2.0
 💡 Run '/update' to update to the latest version.
 ```
 
