@@ -34,15 +34,15 @@ import (
 type Chat struct {
 	OldVqd     string
 	NewVqd     string
+	VqdHash1   string // x-vqd-hash-1 header (full VQD hash)
+	FeSignals  string // x-fe-signals header
+	FeVersion  string // x-fe-version header
 	Model      models.Model
 	Messages   []Message
 	Client     *http.Client
 	CookieJar  *cookiejar.Jar
 	LastHash   string
 	RetryCount int
-	FeSignals  string
-	FeVersion  string
-	VqdHash1   string
 
 	// New intelligent features
 	Analytics        *analytics.ChatAnalytics
@@ -77,7 +77,8 @@ type ChatPayload struct {
 
 func InitializeSession(cfg *config.Config) *Chat {
 	model := models.GetModel(cfg.DefaultModel)
-	chat := NewChat(GetVQD(), model, cfg)
+	vqd, vqdHash1, feSignals, feVersion := GetVQD()
+	chat := NewChat(vqd, vqdHash1, feSignals, feVersion, model, cfg)
 	ui.AIln("Chat initialized with model: %s", model)
 	setTerminalTitle(fmt.Sprintf("DuckDuckGo Chat - %s", model))
 	return chat
@@ -92,7 +93,7 @@ func setTerminalTitle(title string) {
 	}
 }
 
-func NewChat(vqd string, model models.Model, cfg *config.Config) *Chat {
+func NewChat(vqd, vqdHash1, feSignals, feVersion string, model models.Model, cfg *config.Config) *Chat {
 	jar, _ := cookiejar.New(nil)
 
 	// Set required cookies avec les cookies minimum nécessaires
@@ -104,23 +105,6 @@ func NewChat(vqd string, model models.Model, cfg *config.Config) *Chat {
 	}
 	jar.SetCookies(u, cookies)
 
-	// Try to get dynamic headers
-	var feSignals, feVersion, vqdHash1 string
-
-	ui.Warningln("⌛ Attempting to extract dynamic headers from DuckDuckGo...")
-	if dynamicHeaders, err := ExtractDynamicHeaders(); err == nil {
-		feSignals = dynamicHeaders.FeSignals
-		feVersion = dynamicHeaders.FeVersion
-		vqdHash1 = dynamicHeaders.VqdHash1
-		ui.AIln("✅ Successfully extracted dynamic headers")
-	} else {
-		ui.Warningln("⚠️ Failed to get dynamic headers, falling back to placeholders. Error: %v", err)
-		// Fallback to working static values - updated for Chrome 138
-		feSignals = "eyJzdGFydCI6MTc1MTc1MTg4NTc3MiwiZXZlbnRzIjpbeyJuYW1lIjoic3RhcnROZXdDaGF0IiwiZGVsdGEiOjk1fSx7Im5hbWUiOiJyZWNlbnRDaGF0c0xpc3RJbXByZXNzaW9uIiwiZGVsdGEiOjIxOX0seyJuYW1lIjoiaW5pdFN3aXRjaE1vZGVsIiwiZGVsdGEiOjI2OTd9LHsibmFtZSI6InN0YXJ0TmV3Q2hhdCIsImRlbHRhIjo4MTYxfV0sImVuZCI6MjU0ODN9"
-		feVersion = "serp_20250704_184539_ET-8bee6051143b0c382099"
-		vqdHash1 = "eyJzZXJ2ZXJfaGFzaGVzIjpbIjdYbEtTdFJxbkRDbVV6dEh2TkVBMm9kYXB5S3NKR21WSVYxZG4xWHpHbFk9Iiwic3pKR05nSytIV3pHWXVIR0taU1NjVXhOU2EyQmhJMy9XbExvalNzUDZRZz0iLCJhNzFZL05QM2RnMGoyUEEzK2p6S1ovLytnL01HWU1VZjd4ZXlIbkdVMDhFPSJdLCJjbGllbnRfaGFzaGVzIjpbImxWblI0MStCMVFWZ0o4d0hhMUdBNmdxR0JoSjlWdjN5K0dISkdGekJmTGM9IiwiakNoZUlFNUVKUjJlMUlURy9zQzd0N250QnVTQm9qdDY5MVVGNk1BK01pZz0iLCJFczV0akh6VjVTKzNCSEdVTnZ6Z1pZeVAvU3JBa3JETWVBSzlKVUlReDBjPSJdLCJzaWduYWxzIjp7fSwibWV0YSI6eyJ2IjoiNCIsImNoYWxsZW5nZV9pZCI6IjRmZmJhYzliNmIxMGM4MWVmODE0YzgxZTdmMmE4MDkxZDc5ODI0OGI2MDYxMmE0ZTViOGNhYjFhNDRkZjQ0OTRoOGpidCIsInRpbWVzdGFtcCI6IjE3NTE3NTE4ODU0ODMiLCJvcmlnaW4iOiJodHRwczovL2R1Y2tkdWNrZ28uY29tIiwic3RhY2siOiJFcnJvclxuYXQgdWUgKGh0dHBzOi8vZHVja2R1Y2tnby5jb20vZGlzdC93cG0uY2hhdC44YmVlNjA1MTE0M2IwYzM4MjA5OS5qczoxOjI2MTU4KVxuYXQgYXN5bmMgaHR0cHM6Ly9kdWNrZHVja2dvLmNvbS9kaXN0L3dwbS5jaGF0LjhiZWU2MDUxMTQzYjBjMzgyMDk5LmpzOjE6MjgzNDUiLCJkdXJhdGlvbiI6Ijg4In19"
-	}
-
 	// Generate unique session ID
 	sessionID := fmt.Sprintf("session_%d", time.Now().UnixNano())
 
@@ -129,17 +113,20 @@ func NewChat(vqd string, model models.Model, cfg *config.Config) *Chat {
 	contextOptimizer := intelligence.NewContextOptimizer()
 	historyManager := persistence.NewHistoryManager(cfg.ExportDir)
 
+	// Use all headers like the real web browser
+	ui.AIln("🔍 Using VQD with all required headers like web browser")
+
 	chat := &Chat{
-		OldVqd:     vqd,
-		NewVqd:     vqd,
+		OldVqd:     vqd,       // x-vqd-4 value
+		NewVqd:     vqd,       // x-vqd-4 value
+		VqdHash1:   vqdHash1,  // x-vqd-hash-1 value
+		FeSignals:  feSignals, // x-fe-signals value
+		FeVersion:  feVersion, // x-fe-version value
 		Model:      model,
 		Messages:   []Message{},
 		CookieJar:  jar,
 		Client:     &http.Client{Timeout: 30 * time.Second, Jar: jar},
 		RetryCount: 0,
-		FeSignals:  feSignals,
-		FeVersion:  feVersion,
-		VqdHash1:   vqdHash1,
 
 		// Initialize new intelligent features
 		Analytics:        analytics,
@@ -156,10 +143,14 @@ func NewChat(vqd string, model models.Model, cfg *config.Config) *Chat {
 	return chat
 }
 
-func GetVQD() string {
+func GetVQD() (string, string, string, string) {
+	// Simple approach like the working PowerShell script
+	// Use static headers that work, no complex challenges
+	ui.Warningln("⌛ Getting VQD from status API (simple approach like working PS1 script)...")
+
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	// Set up cookies avec les cookies minimum nécessaires
+	// Set up cookies avec les cookies minimum nécessaires (comme dans le script PS1)
 	jar, _ := cookiejar.New(nil)
 	u, _ := url.Parse("https://duckduckgo.com")
 	cookies := []*http.Cookie{
@@ -170,13 +161,19 @@ func GetVQD() string {
 	jar.SetCookies(u, cookies)
 	client.Jar = jar
 
+	// Direct GET to /status with exact headers from working PS1 script
 	req, _ := http.NewRequest("GET", models.StatusURL, nil)
 	req.Header.Set("Accept", "*/*")
-	req.Header.Set("Accept-Language", "fr-FR,fr;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
+	req.Header.Set("Accept-Language", "fr-FR,fr;q=0.6")
+	req.Header.Set("Authority", "duckduckgo.com")
 	req.Header.Set("Cache-Control", "no-store")
 	req.Header.Set("DNT", "1")
+	req.Header.Set("Method", "GET")
+	req.Header.Set("Path", "/duckchat/v1/status")
 	req.Header.Set("Priority", "u=1, i")
 	req.Header.Set("Referer", "https://duckduckgo.com/")
+	req.Header.Set("Scheme", "https")
 	req.Header.Set("Sec-CH-UA", `"Not)A;Brand";v="8", "Chromium";v="138", "Brave";v="138"`)
 	req.Header.Set("Sec-CH-UA-Mobile", "?0")
 	req.Header.Set("Sec-CH-UA-Platform", `"Windows"`)
@@ -190,10 +187,25 @@ func GetVQD() string {
 	resp, err := client.Do(req)
 	if err != nil {
 		ui.Errorln("Error fetching VQD: %v", err)
-		return ""
+		return "", "", "", ""
 	}
 	defer resp.Body.Close()
-	return resp.Header.Get("x-vqd-hash-1")
+
+	// Le VQD header de la status API pour x-vqd-4
+	vqdHeader := resp.Header.Get("x-vqd-hash-1")
+	if vqdHeader == "" {
+		ui.Errorln("No VQD header found in response")
+		return "", "", "", ""
+	}
+
+	// Return the VQD and static headers that work in PowerShell script
+	vqd := vqdHeader
+	vqdHash1 := "eyJzZXJ2ZXJfaGFzaGVzIjpbImRQSlJJTWczZnFYQXIvaStaa3c2cEpFVzEwckdTdmxJVlVkNlFsOVRGWXc9IiwiMUN3Qzg3N0Q3WXE1dzlEeTc4UjhBVi9qZVZWaUlYbmV0Q0xvckx3c01QZz0iLCJQSzc3TGc2L25weDdWQ2J2UWxsTEhBR3cyenJIVmEvQUFBRFBhQTl1ekVRPSJdLCJjbGllbnRfaGFzaGVzIjpbImxWblI0MStCMVFWZ0o4d0hhMUdBNmdxR0JoSjlWdjN5K0dISkdGekJmTGM9IiwiVS9RRUc2RE1qdEU4V2hHU1FxOUU1Z0VGNmw1SWJrNk9NVlBuY01DU1licz0iLCJ6SURsYUNvZG9JUjNwbTNSVTlWOUJXaUJkZDJqenRMODAyN0VYTHhkWll3PSJdLCJzaWduYWxzIjp7fSwibWV0YSI6eyJ2IjoiNCIsImNoYWxsZW5nZV9pZCI6ImM4M2Q0ZTc5NTU2MjJmZjU3Mzc0ZDUzOTk2ZjliMmJhZGE2ZDQxZTMzNDM1ZjVlNzMyYjFmNmZjNmQ0ZTE1NzVoOGpidCIsInRpbWVzdGFtcCI6IjE3NTIxNTU3Nzc4NjYiLCJvcmlnaW4iOiJodHRwczovL2R1Y2tkdWNrZ28uY29tIiwic3RhY2siOiJFcnJvclxuYXQgRSAoaHR0cHM6Ly9kdWNrZHVja2dvLmNvbS9kaXN0L3dwbS5jaGF0LjcwZWFjYTZhZWEyOTQ4YjBiYjYwLmpzOjE6MTQ4MjUpXG5hdCBhc3luYyBodHRwczovL2R1Y2tkdWNrZ28uY29tL2Rpc3Qvd3BtLmNoYXQuNzBlYWNhNmFlYTI5NDhiMGJiNjAuanM6MToxNjk4NSIsImR1cmF0aW9uIjoiNTgifX0="
+	feSignals := "eyJzdGFydCI6MTc1MjE1NTc3NzQ4MCwiZXZlbnRzIjpbeyJuYW1lIjoic3RhcnROZXdDaGF0IiwiZGVsdGEiOjc1fSx7Im5hbWUiOiJyZWNlbnRDaGF0c0xpc3RJbXByZXNzaW9uIiwiZGVsdGEiOjEyNH1dLCJlbmQiOjQzNDN9"
+	feVersion := "serp_20250710_090702_ET-70eaca6aea2948b0bb60"
+
+	ui.AIln("✅ Successfully got VQD and all required headers")
+	return vqd, vqdHash1, feSignals, feVersion
 }
 
 func (c *Chat) Clear(cfg *config.Config) {
@@ -206,8 +218,12 @@ func (c *Chat) Clear(cfg *config.Config) {
 
 	if len(c.Messages) > 0 {
 		c.Messages = []Message{}
-		c.NewVqd = GetVQD()
+		newVqd, newVqdHash1, newFeSignals, newFeVersion := GetVQD()
+		c.NewVqd = newVqd
 		c.OldVqd = c.NewVqd
+		c.VqdHash1 = newVqdHash1
+		c.FeSignals = newFeSignals
+		c.FeVersion = newFeVersion
 		// Hash will be refreshed on next request if needed
 		c.RetryCount = 0
 
@@ -439,7 +455,11 @@ func (c *Chat) FetchStream(content string) (<-chan string, error) {
 func (c *Chat) Fetch(content string) (*http.Response, error) {
 	startTime := time.Now()
 	if c.NewVqd == "" {
-		c.NewVqd = GetVQD()
+		newVqd, newVqdHash1, newFeSignals, newFeVersion := GetVQD()
+		c.NewVqd = newVqd
+		c.VqdHash1 = newVqdHash1
+		c.FeSignals = newFeSignals
+		c.FeVersion = newFeVersion
 		if c.NewVqd == "" {
 			return nil, fmt.Errorf("failed to get VQD")
 		}
@@ -476,14 +496,19 @@ func (c *Chat) Fetch(content string) (*http.Response, error) {
 		return nil, fmt.Errorf("error creating request: %v", err)
 	}
 
-	// Set all required headers based on the curl requests
+	// Set ALL required headers EXACTLY like the real web browser request
 	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Accept-Language", "fr-FR,fr;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
+	req.Header.Set("Accept-Language", "fr-FR,fr;q=0.6")
+	req.Header.Set("Authority", "duckduckgo.com")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("DNT", "1")
+	req.Header.Set("Method", "POST")
 	req.Header.Set("Origin", "https://duckduckgo.com")
+	req.Header.Set("Path", "/duckchat/v1/chat")
 	req.Header.Set("Priority", "u=1, i")
 	req.Header.Set("Referer", "https://duckduckgo.com/")
+	req.Header.Set("Scheme", "https")
 	req.Header.Set("Sec-CH-UA", `"Not)A;Brand";v="8", "Chromium";v="138", "Brave";v="138"`)
 	req.Header.Set("Sec-CH-UA-Mobile", "?0")
 	req.Header.Set("Sec-CH-UA-Platform", `"Windows"`)
@@ -492,10 +517,15 @@ func (c *Chat) Fetch(content string) (*http.Response, error) {
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	req.Header.Set("Sec-GPC", "1")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36")
-	req.Header.Set("x-fe-signals", c.FeSignals)
-	req.Header.Set("x-fe-version", c.FeVersion)
-	req.Header.Set("x-vqd-4", c.NewVqd)
 
+	// ALL VQD-related headers from the real web browser request
+	req.Header.Set("x-vqd-4", c.NewVqd)
+	if c.FeSignals != "" {
+		req.Header.Set("x-fe-signals", c.FeSignals)
+	}
+	if c.FeVersion != "" {
+		req.Header.Set("x-fe-version", c.FeVersion)
+	}
 	if c.VqdHash1 != "" {
 		req.Header.Set("x-vqd-hash-1", c.VqdHash1)
 	}
@@ -520,21 +550,25 @@ func (c *Chat) Fetch(content string) (*http.Response, error) {
 		if resp.StatusCode == 418 || resp.StatusCode == 429 || strings.Contains(string(body), "ERR_INVALID_VQD") {
 			// Track specific error types
 			errorType := "unknown"
-			if resp.StatusCode == 418 {
+			switch resp.StatusCode {
+			case 418:
 				errorType = "418"
-			} else if resp.StatusCode == 429 {
+			case 429:
 				errorType = "429"
 			}
 			c.Analytics.RecordChatInteraction(time.Since(startTime), false, errorType)
 
 			time.Sleep(2 * time.Second)
 
-			// Refresh both VQD and dynamic headers on 418 errors
-			c.NewVqd = GetVQD()
-			if resp.StatusCode == 418 && c.RetryCount == 0 {
-				ui.Warningln("🔄 Error 418 detected, refreshing headers...")
-				c.RefreshDynamicHeaders() // Try refreshing headers on first 418 error
-				c.Analytics.RecordHeaderRefresh()
+			// Refresh ONLY VQD on errors, like the PowerShell script
+			ui.Warningln("🔄 Error %d detected, refreshing VQD...", resp.StatusCode)
+			newVqd, newVqdHash1, newFeSignals, newFeVersion := GetVQD()
+			if newVqd != "" {
+				c.NewVqd = newVqd
+				c.VqdHash1 = newVqdHash1
+				c.FeSignals = newFeSignals
+				c.FeVersion = newFeVersion
+				ui.AIln("✅ Refreshed VQD: %s...", c.NewVqd[:50])
 			}
 			c.Analytics.RecordVQDRefresh()
 
@@ -764,20 +798,6 @@ func HandleExportCommand(c *Chat, cfg *config.Config) {
 	}
 
 	ui.AIln("✅ Saved to: %s", fullPath)
-}
-
-func (c *Chat) RefreshDynamicHeaders() error {
-	ui.Warningln("⌛ Refreshing dynamic headers...")
-	if dynamicHeaders, err := ExtractDynamicHeaders(); err == nil {
-		c.FeSignals = dynamicHeaders.FeSignals
-		c.FeVersion = dynamicHeaders.FeVersion
-		c.VqdHash1 = dynamicHeaders.VqdHash1
-		ui.AIln("✅ Successfully refreshed dynamic headers")
-		return nil
-	} else {
-		ui.Warningln("⚠️ Failed to refresh dynamic headers: %v", err)
-		return err
-	}
 }
 
 func (c *Chat) ChangeModel(model models.Model) {
