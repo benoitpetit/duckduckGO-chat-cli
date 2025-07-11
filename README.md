@@ -10,11 +10,18 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go Version">
-  <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20MacOS-blue?style=flat-square" alt="Platform">
+  <a href="https://github.com/benoitpetit/duckduckGO-chat-cli/releases" target="_blank">
+    <img src="https://img.shields.io/github/v/release/benoitpetit/duckduckGO-chat-cli?style=flat-square" alt="Latest Release">
+  </a>
+  <a href="[https://github.com/benoitpetit/duckduckGO-chat-cli#platforms](https://github.com/benoitpetit/duckduckGO-chat-cli?tab=readme-ov-file#-installation)" target="_blank">
+    <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20MacOS-blue?style=flat-square" alt="Platform">
+  </a>
   <img src="https://img.shields.io/badge/License-Open%20Source-green?style=flat-square" alt="License">
-  <img src="https://img.shields.io/github/v/release/benoitpetit/duckduckGO-chat-cli?style=flat-square" alt="Latest Release">
-  <img src="https://img.shields.io/liberapay/patrons/devbyben.svg?logo=liberapay&label=Donators&color=gold&style=flat-square">
+  <a href="https://liberapay.com/devbyben" target="_blank">
+    <img src="https://img.shields.io/liberapay/patrons/devbyben.svg?logo=liberapay&label=Donators&color=gold&style=flat-square" alt="Liberapay Donators">
+  </a>
 </p>
+
 
 <p align="center">
   <a href="#-key-features">Features</a> •
