@@ -32,12 +32,3 @@ Briefly describe the changes included in this release.
 ## 📦 Version
 Specify the desired version number (format X.X.X):
 **Version:** `1.X.X`
-
-## 🔍 Checklist before merge
-- [ ] Code has been tested
-- [ ] Documentation is up to date
-- [ ] Changes are compatible
-- [ ] README updated if necessary
-
-## 📝 Additional Notes
-Add any additional information regarding this release.

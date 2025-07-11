@@ -353,9 +353,6 @@ This project uses GitHub Actions for automated building and releasing:
 
 - **[🔧 CI/CD & Release Process](.github/README.md)** - Complete GitHub Actions documentation
 - **[🔬 Reverse Engineering](reverse/README.md)** - Complete technical reverse engineering documentation
-  - [REVERSE_ENGINEERING_COMPLETE.md](reverse/REVERSE_ENGINEERING_COMPLETE.md) - Anti-418 solution with 98.3% success rate
-  - [REVERSE_ENGINEERING_UPDATES_1.md](reverse/REVERSE_ENGINEERING_UPDATES_1.md) - Latest API changes and Chrome 138 compatibility updates
-  - [REVERSE_ENGINEERING_UPDATES_2.md](reverse/REVERSE_ENGINEERING_UPDATES_2.md) - Latest API changes and Chrome 139 compatibility updates
 
 ## 🚨 Troubleshooting
 
