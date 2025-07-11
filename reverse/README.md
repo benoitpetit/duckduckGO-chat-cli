@@ -10,6 +10,7 @@ This directory contains the complete technical documentation for the DuckDuckGo 
 |------|-------------|--------|--------|
 | [`REVERSE_ENGINEERING_COMPLETE.md`](./REVERSE_ENGINEERING_COMPLETE.md) | **Anti-418 Solution** - Complete technical implementation with 98.3% error reduction | ✅ Stable | Error Prevention & Recovery |
 | [`REVERSE_ENGINEERING_UPDATES_1.md`](./REVERSE_ENGINEERING_UPDATES_1.md) | **Chrome 138 Updates** - Latest API changes and compatibility fixes | ✅ Current | API Compatibility |
+| [`REVERSE_ENGINEERING_UPDATES_2.md`](./REVERSE_ENGINEERING_UPDATES_2.md) | **Future Updates** - Planned changes and enhancements | 🛠️ In Progress | Future Enhancements |
 
 ---
 

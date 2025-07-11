@@ -20,8 +20,8 @@
   <a href="#-installation">Installation</a> •
   <a href="#-usage">Usage</a> •
   <a href="#-configuration">Configuration</a> •
-  <a href="#-intelligent-features">Intelligent Features</a> •
-  <a href="reverse/">Reverse Engineering</a>
+  <a href="#-intelligent-features-deep-dive">Intelligent Features</a> •
+  <a href="reverse/README.md">Reverse Engineering</a>
 </p>
 
 ---
@@ -97,6 +97,7 @@ The CLI now tracks comprehensive real-time metrics:
 - **Content Analysis**: Message counts, token estimation, context optimization savings  
 - **Error Tracking**: 418/429 error monitoring, VQD refresh rates, header refresh frequency
 - **Usage Patterns**: Command usage statistics, model changes, file/URL processing
+- **Session Duration**: Total time spent in the session, average response times
 
 **Commands:**
 - `/stats` - View current session analytics anytime
@@ -109,6 +110,7 @@ Automatically manages conversation context for optimal performance:
 - **Importance Scoring**: Preserves critical information while removing redundant content
 - **Memory Efficiency**: Reduces token usage by up to 40% while maintaining quality
 - **Configurable Thresholds**: Customize optimization triggers and compression ratios
+- **Automatic Context Management**: Automatically compresses and optimizes context as needed
 
 ### 💾 Persistent History Management
 Never lose important conversations:
@@ -117,30 +119,8 @@ Never lose important conversations:
 - **Compression Storage**: Efficient gzip compression reduces storage by 70%
 - **Session Recovery**: Resume conversations from any previous session
 - **Intelligent Indexing**: Fast search and retrieval of historical conversations
-
-**Example Session Statistics:**
-```
-🧠 SESSION ANALYTICS SUMMARY
-═══════════════════════════════════════════════════════════
-📊 Session Performance
-   Duration: 15.3m | Messages: 24 | Avg Response: 1.2s
-   API Success Rate: 98.5% (40/41 calls)
-
-💬 Content Metrics
-   User Messages: 12 | AI Responses: 12
-   Estimated Tokens: 8,450 | Context Optimizations: 3
-   Bytes Saved: 2.1 KB through compression
-
-🔧 Technical Details
-   Model Changes: 2 | Files Processed: 3 | URLs: 1
-   VQD Refreshes: 1 | Header Refreshes: 0
-   Commands Used: /search(2), /file(3), /export(1)
-
-🎯 Context Optimization
-   Optimizations: 3 | Compressions: 2 | Efficiency: 89%
-   Memory Saved: 2,156 bytes | Quality Preserved: 95%
-═══════════════════════════════════════════════════════════
-```
+- **Searchable Archive**: Use `/history` to browse and search past conversations
+- **Session Loading**: Load previous sessions interactively or by ID with `/load`
 
 ## 🤖 Available Models
 
@@ -250,6 +230,20 @@ Enter your choice: 2
 
 </details>
 
+<details>
+<summary><strong>🗂️ Example 3: Session Loading</strong></summary>
+
+```bash
+# List and interactively select a previous session to restore
+You: /load
+
+# Or load a session directly by its ID
+You: /load 12345
+
+# The chat context and history will be restored for continued conversation.
+```
+</details>
+
 ### 📝 Command Reference
 
 | Command           | Example                  | Description                     |
@@ -266,6 +260,7 @@ Enter your choice: 2
 | 📤 `/export`         | `/export`                | Export content (interactive)    |
 | 📋 `/copy`           | `/copy`                  | Copy to clipboard (interactive) |
 | 📚 `/history`        | `/history`               | Display conversation history    |
+| 📚 `/load [session_id]` | `/load` or `/load 12345` | Load and restore a previous session interactively or by ID |
 | ⚙️ `/config`         | `/config`                | Modify configuration settings   |
 | 🏷️ `/version`        | `/version`               | Show version and system info    |
 | 🔄 `/update`         | `/update` or `/update --force` | Update the CLI to the latest version |
@@ -360,6 +355,7 @@ This project uses GitHub Actions for automated building and releasing:
 - **[🔬 Reverse Engineering](reverse/README.md)** - Complete technical reverse engineering documentation
   - [REVERSE_ENGINEERING_COMPLETE.md](reverse/REVERSE_ENGINEERING_COMPLETE.md) - Anti-418 solution with 98.3% success rate
   - [REVERSE_ENGINEERING_UPDATES_1.md](reverse/REVERSE_ENGINEERING_UPDATES_1.md) - Latest API changes and Chrome 138 compatibility updates
+  - [REVERSE_ENGINEERING_UPDATES_2.md](reverse/REVERSE_ENGINEERING_UPDATES_2.md) - Latest API changes and Chrome 139 compatibility updates
 
 ## 🚨 Troubleshooting
 

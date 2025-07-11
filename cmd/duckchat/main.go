@@ -317,6 +317,8 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, cmd *command.Comm
 		if err := update.HandleUpdateCommand(Version, force); err != nil {
 			ui.Errorln("Update failed: %v", err)
 		}
+	case cmd.Type == "/load":
+		chat.HandleLoadCommand(chatSession, cmd.Args)
 	default:
 		// Check if the input is potentially pasted content (long text, URLs, etc.)
 		if cfg.ConfirmLongInput && shouldConfirmLongInput(cmd.Raw) {

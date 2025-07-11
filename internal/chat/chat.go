@@ -800,6 +800,62 @@ func HandleExportCommand(c *Chat, cfg *config.Config) {
 	ui.AIln("✅ Saved to: %s", fullPath)
 }
 
+func HandleLoadCommand(c *Chat, args string) {
+	if args == "" {
+		// Interactive mode: list sessions and let user choose
+		sessions, err := c.HistoryManager.ListSessions()
+		if err != nil {
+			ui.Errorln("Error listing sessions: %v", err)
+			return
+		}
+
+		if len(sessions) == 0 {
+			ui.Warningln("No saved sessions found.")
+			return
+		}
+
+		options := make([]string, len(sessions))
+		for i, s := range sessions {
+			options[i] = fmt.Sprintf("%s (Started: %s, Messages: %d)", s.ID, s.StartTime.Format("2006-01-02 15:04"), len(s.Messages))
+		}
+
+		var selectedOption string
+		prompt := &survey.Select{
+			Message: "Select a session to load:",
+			Options: options,
+			PageSize: 10,
+		}
+		err = survey.AskOne(prompt, &selectedOption, survey.WithStdio(os.Stdin, os.Stdout, os.Stderr))
+		if err != nil {
+			ui.Warningln("\nSession load canceled.")
+			return
+		}
+
+		sessionID := strings.Split(selectedOption, " ")[0]
+		loadAndRestoreSession(c, sessionID)
+
+	} else {
+		// Direct load mode: load session by ID
+		loadAndRestoreSession(c, args)
+	}
+}
+
+func loadAndRestoreSession(c *Chat, sessionID string) {
+	session, err := c.HistoryManager.LoadSession(sessionID)
+	if err != nil {
+		ui.Errorln("Error loading session %s: %v", sessionID, err)
+		return
+	}
+
+	// Save current session before loading a new one
+	if len(c.Messages) > 0 {
+		c.saveCurrentSession()
+	}
+
+	c.RestoreContext(session)
+	ui.AIln("Session %s loaded successfully. Context restored.", sessionID)
+}
+
 func (c *Chat) ChangeModel(model models.Model) {
 	c.Model = model
 	c.Analytics.RecordModelChange(string(model))
@@ -812,6 +868,21 @@ func (c *Chat) AddContextMessage(content string) {
 		Role:    "user",
 		Content: content,
 	})
+}
+
+// RestoreContext restores the chat context from a given conversation session.
+func (c *Chat) RestoreContext(session *persistence.ConversationSession) {
+	// Convert persistence.Message to chat.Message
+	c.Messages = make([]Message, len(session.Messages))
+	for i, msg := range session.Messages {
+		c.Messages[i] = Message{
+			Content: msg.Content,
+			Role:    msg.Role,
+		}
+	}
+	c.SessionID = session.ID
+	c.Model = models.Model(session.Model) // Restore the model used in that session
+	ui.AIln("Context restored from session %s. Model set to %s.", session.ID, session.Model)
 }
 
 // Helper methods for intelligent features

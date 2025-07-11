@@ -135,6 +135,12 @@ func GetCommandRegistry() *CommandRegistry {
 				Usage:       "/update [--force]",
 				Category:    "core",
 			},
+			"/load": {
+				Name:        "/load",
+				Description: "Load a previous chat session",
+				Usage:       "/load [session_id]",
+				Category:    "core",
+			},
 		},
 	}
 }
