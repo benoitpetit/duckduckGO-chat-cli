@@ -821,8 +821,8 @@ func HandleLoadCommand(c *Chat, args string) {
 
 		var selectedOption string
 		prompt := &survey.Select{
-			Message: "Select a session to load:",
-			Options: options,
+			Message:  "Select a session to load:",
+			Options:  options,
 			PageSize: 10,
 		}
 		err = survey.AskOne(prompt, &selectedOption, survey.WithStdio(os.Stdin, os.Stdout, os.Stderr))
