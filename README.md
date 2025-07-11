@@ -9,10 +9,11 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go Version">
-  <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20MacOS-blue?style=for-the-badge" alt="Platform">
-  <img src="https://img.shields.io/badge/License-Open%20Source-green?style=for-the-badge" alt="License">
-  <img src="https://img.shields.io/github/v/release/benoitpetit/duckduckGO-chat-cli?style=for-the-badge" alt="Latest Release">
+  <img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go Version">
+  <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20MacOS-blue?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/badge/License-Open%20Source-green?style=flat-square" alt="License">
+  <img src="https://img.shields.io/github/v/release/benoitpetit/duckduckGO-chat-cli?style=flat-square" alt="Latest Release">
+  <img src="https://img.shields.io/liberapay/patrons/devbyben.svg?logo=liberapay&label=Donators&color=gold&style=flat-square">
 </p>
 
 <p align="center">
