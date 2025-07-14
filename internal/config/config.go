@@ -38,16 +38,17 @@ type APIConfig struct {
 }
 
 type Config struct {
-	TOSAccepted      bool          `json:"tos_accepted"`
-	DefaultModel     string        `json:"default_model"`
-	ExportDir        string        `json:"export_dir"`
-	LastUpdateTime   time.Time     `json:"last_update_time"`
-	Search           SearchConfig  `json:"search"`
-	Library          LibraryConfig `json:"library"`
-	API              APIConfig     `json:"api"`
-	ShowMenu         bool          `json:"show_menu"`
-	GlobalPrompt     string        `json:"global_prompt"`
-	ConfirmLongInput bool          `json:"confirm_long_input"`
+	TOSAccepted      bool              `json:"tos_accepted"`
+	DefaultModel     string            `json:"default_model"`
+	ExportDir        string            `json:"export_dir"`
+	LastUpdateTime   time.Time         `json:"last_update_time"`
+	Search           SearchConfig      `json:"search"`
+	Library          LibraryConfig     `json:"library"`
+	API              APIConfig         `json:"api"`
+	ShowMenu         bool              `json:"show_menu"`
+	GlobalPrompt     string            `json:"global_prompt"`
+	ConfirmLongInput bool              `json:"confirm_long_input"`
+	Prompts          map[string]string `json:"prompts"`
 }
 
 func Initialize() *Config {
@@ -72,6 +73,11 @@ func Initialize() *Config {
 	}
 	if !cfg.Library.Enabled {
 		cfg.Library.Enabled = true // default to enabled
+	}
+
+	// Initialize prompts map if nil
+	if cfg.Prompts == nil {
+		cfg.Prompts = make(map[string]string)
 	}
 
 	// Initialize API config with defaults - check if config file exists first
@@ -99,12 +105,16 @@ func loadConfig() *Config {
 		ExportDir:        defaultExportPath(),
 		LastUpdateTime:   time.Now(),
 		ConfirmLongInput: true, // default to enabled for safety
+		Prompts:          make(map[string]string),
 	}
 
 	if data, err := os.ReadFile(configPath()); err == nil {
 		if err := json.Unmarshal(data, cfg); err != nil {
 			ui.Warningln("Warning: Failed to parse config file: %v", err)
 		}
+	}
+	if cfg.Prompts == nil {
+		cfg.Prompts = make(map[string]string)
 	}
 	return cfg
 }
@@ -199,6 +209,7 @@ func HandleConfiguration(cfg *Config, chatSession interfaces.ChatSession) {
 				"Long Input Protection",
 				"Library Settings",
 				"API Settings",
+				"Prompt Management",
 				"Back to chat",
 			},
 			Default: "Back to chat",
@@ -222,6 +233,8 @@ func HandleConfiguration(cfg *Config, chatSession interfaces.ChatSession) {
 			handleLibrarySettings(cfg)
 		case "API Settings":
 			handleAPISettings(cfg)
+		case "Prompt Management":
+			HandlePromptManagement(cfg)
 		case "Back to chat", "":
 			return
 		default:
@@ -453,5 +466,143 @@ func saveAndReport(cfg *Config, message string) {
 		ui.Errorln("Error saving config: %v", err)
 	} else {
 		ui.AIln(message)
+	}
+}
+
+// AddPrompt adds a new prompt to the config
+func AddPrompt(cfg *Config, name, content string) error {
+	if cfg.Prompts == nil {
+		cfg.Prompts = make(map[string]string)
+	}
+	if _, exists := cfg.Prompts[name]; exists {
+		return fmt.Errorf("prompt '%s' already exists", name)
+	}
+	cfg.Prompts[name] = content
+	return saveConfig(cfg)
+}
+
+// EditPrompt edits an existing prompt
+func EditPrompt(cfg *Config, name, content string) error {
+	if cfg.Prompts == nil {
+		return fmt.Errorf("no prompts configured")
+	}
+	if _, exists := cfg.Prompts[name]; !exists {
+		return fmt.Errorf("prompt '%s' does not exist", name)
+	}
+	cfg.Prompts[name] = content
+	return saveConfig(cfg)
+}
+
+// RemovePrompt removes a prompt by name
+func RemovePrompt(cfg *Config, name string) error {
+	if cfg.Prompts == nil {
+		return fmt.Errorf("no prompts configured")
+	}
+	if _, exists := cfg.Prompts[name]; !exists {
+		return fmt.Errorf("prompt '%s' does not exist", name)
+	}
+	delete(cfg.Prompts, name)
+	return saveConfig(cfg)
+}
+
+// ListPrompts returns a list of prompt names
+func ListPrompts(cfg *Config) []string {
+	if cfg.Prompts == nil {
+		return []string{}
+	}
+	names := make([]string, 0, len(cfg.Prompts))
+	for name := range cfg.Prompts {
+		names = append(names, name)
+	}
+	return names
+}
+
+// GetPrompt returns the content of a prompt by name
+func GetPrompt(cfg *Config, name string) (string, error) {
+	if cfg.Prompts == nil {
+		return "", fmt.Errorf("no prompts configured")
+	}
+	content, exists := cfg.Prompts[name]
+	if !exists {
+		return "", fmt.Errorf("prompt '%s' does not exist", name)
+	}
+	return content, nil
+}
+
+// handlePromptManagement provides an interactive menu for managing prompts
+func HandlePromptManagement(cfg *Config) {
+	for {
+		choice := ""
+		prompt := &survey.Select{
+			Message: "Prompt Management",
+			Options: []string{"List Prompts", "Add Prompt", "Edit Prompt", "Remove Prompt", "Back"},
+			Default: "Back",
+		}
+		survey.AskOne(prompt, &choice)
+		switch choice {
+		case "List Prompts":
+			names := ListPrompts(cfg)
+			if len(names) == 0 {
+				ui.AIln("No prompts saved.")
+			} else {
+				ui.AIln("Saved prompts:")
+				for _, name := range names {
+					content, _ := GetPrompt(cfg, name)
+					preview := content
+					if len(preview) > 80 {
+						preview = preview[:80] + "..."
+					}
+					ui.AIln("- %s: %s", name, preview)
+				}
+			}
+		case "Add Prompt":
+			name := ""
+			content := ""
+			survey.AskOne(&survey.Input{Message: "Prompt name:"}, &name)
+			survey.AskOne(&survey.Input{Message: "Prompt content:"}, &content)
+			if name == "" || content == "" {
+				ui.Errorln("Name and content required.")
+				continue
+			}
+			err := AddPrompt(cfg, name, content)
+			if err != nil {
+				ui.Errorln("%v", err)
+			} else {
+				ui.AIln("Prompt '%s' added.", name)
+			}
+		case "Edit Prompt":
+			names := ListPrompts(cfg)
+			if len(names) == 0 {
+				ui.AIln("No prompts to edit.")
+				continue
+			}
+			name := ""
+			survey.AskOne(&survey.Select{Message: "Select prompt to edit:", Options: names}, &name)
+			oldContent, _ := GetPrompt(cfg, name)
+			content := oldContent
+			survey.AskOne(&survey.Input{Message: "New content:", Default: oldContent}, &content)
+			err := EditPrompt(cfg, name, content)
+			if err != nil {
+				ui.Errorln("%v", err)
+			} else {
+				ui.AIln("Prompt '%s' updated.", name)
+			}
+		case "Remove Prompt":
+			names := ListPrompts(cfg)
+			if len(names) == 0 {
+				ui.AIln("No prompts to remove.")
+				continue
+			}
+			name := ""
+			survey.AskOne(&survey.Select{Message: "Select prompt to remove:", Options: names}, &name)
+			err := RemovePrompt(cfg, name)
+			if err != nil {
+				ui.Errorln("%v", err)
+			} else {
+				ui.AIln("Prompt '%s' removed.", name)
+			}
+		case "Back":
+			return
+		}
 	}
 }

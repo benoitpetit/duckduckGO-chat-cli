@@ -141,6 +141,13 @@ func GetCommandRegistry() *CommandRegistry {
 				Usage:       "/load [session_id]",
 				Category:    "core",
 			},
+			"/prompt": {
+				Name:        "/prompt",
+				Description: "Manage and load custom prompts",
+				Usage:       "/prompt <load|add|edit|remove|list> [name] [-- prompt] OR /prompt",
+				IsChainable: false,
+				Category:    "context",
+			},
 		},
 	}
 }

@@ -948,3 +948,111 @@ func (c *Chat) saveCurrentSession() {
 func (c *Chat) ShowSessionStats() {
 	c.Analytics.DisplayStatistics()
 }
+
+// HandlePromptCommand processes the /prompt command for prompt management and loading
+func HandlePromptCommand(c *Chat, input string, cfg *config.Config) {
+	args := strings.TrimPrefix(input, "/prompt")
+	args = strings.TrimSpace(args)
+	if args == "" || args == "help" {
+		// Launch interactive prompt management menu for consistency
+		config.HandlePromptManagement(cfg)
+		return
+	}
+	fields := strings.Fields(args)
+	if len(fields) == 0 {
+		ui.Errorln("Invalid /prompt usage. Type /prompt help for usage.")
+		return
+	}
+	subcmd := fields[0]
+	switch subcmd {
+	case "list":
+		names := config.ListPrompts(cfg)
+		if len(names) == 0 {
+			ui.AIln("No prompts saved.")
+			return
+		}
+		ui.AIln("Saved prompts:")
+		for _, name := range names {
+			content, _ := config.GetPrompt(cfg, name)
+			preview := content
+			if len(preview) > 80 {
+				preview = preview[:80] + "..."
+			}
+			ui.AIln("- %s: %s", name, preview)
+		}
+	case "add":
+		if len(fields) < 2 {
+			ui.Errorln("Usage: /prompt add <name> -- <prompt text>")
+			return
+		}
+		name := fields[1]
+		promptText := ""
+		if strings.Contains(args, "--") {
+			parts := strings.SplitN(args, "--", 2)
+			promptText = strings.TrimSpace(parts[1])
+		}
+		if promptText == "" {
+			ui.Errorln("Prompt text required after --")
+			return
+		}
+		err := config.AddPrompt(cfg, name, promptText)
+		if err != nil {
+			ui.Errorln("%v", err)
+		} else {
+			ui.AIln("Prompt '%s' added.", name)
+		}
+	case "edit":
+		if len(fields) < 2 {
+			ui.Errorln("Usage: /prompt edit <name> -- <prompt text>")
+			return
+		}
+		name := fields[1]
+		promptText := ""
+		if strings.Contains(args, "--") {
+			parts := strings.SplitN(args, "--", 2)
+			promptText = strings.TrimSpace(parts[1])
+		}
+		if promptText == "" {
+			ui.Errorln("Prompt text required after --")
+			return
+		}
+		err := config.EditPrompt(cfg, name, promptText)
+		if err != nil {
+			ui.Errorln("%v", err)
+		} else {
+			ui.AIln("Prompt '%s' updated.", name)
+		}
+	case "remove":
+		if len(fields) < 2 {
+			ui.Errorln("Usage: /prompt remove <name>")
+			return
+		}
+		name := fields[1]
+		err := config.RemovePrompt(cfg, name)
+		if err != nil {
+			ui.Errorln("%v", err)
+		} else {
+			ui.AIln("Prompt '%s' removed.", name)
+		}
+	case "load":
+		if len(fields) < 2 {
+			ui.Errorln("Usage: /prompt load <name>")
+			return
+		}
+		name := fields[1]
+		promptText, err := config.GetPrompt(cfg, name)
+		if err != nil {
+			ui.Errorln("%v", err)
+			return
+		}
+		// Aperçu du prompt (80 premiers caractères)
+		preview := promptText
+		if len(preview) > 80 {
+			preview = preview[:80] + "..."
+		}
+		ui.AIln("[Prompt: %s] Preview: %s", name, preview)
+		ProcessInput(c, promptText, cfg)
+	default:
+		ui.Errorln("Unknown /prompt subcommand: %s", subcmd)
+	}
+}

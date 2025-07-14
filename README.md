@@ -261,6 +261,7 @@ You: /load 12345
 | 📚 `/library [command] [args]`   | `/library add /path/to/docs` | Manage library directories for bulk file operations |
 | 🌐 `/url <link> [-- prompt]`     | `/url github.com/golang -- Summarize this page` | Add webpage content as context and optionally process it with a prompt  |
 | 📦 `/pmp [path] [options] [-- prompt]` | `/pmp . -i "*.go" -e "test/*"` | Generate structured project prompts with automatic PMP installation |
+| 📝 `/prompt <load|add|edit|remove|list> [name] [-- prompt]` | `/prompt add myprompt -- This is my prompt` | Manage and load custom prompts. Not chainable. |
 | 📊 `/stats` ✨    | `/stats`                 | Show real-time session analytics and performance metrics |
 | 📡 `/api [port]`         | `/api` or `/api 8080`    | Start or stop the API server    |
 | 🤖 `/model`          | `/model` or `/model 2`   | Change AI model (interactive)   |
@@ -274,6 +275,17 @@ You: /load 12345
 | 🔄 `/update`         | `/update` or `/update --force` | Update the CLI to the latest version |
 | ❓ `/help`           | `/help`                  | Show available commands         |
 | 🚪 `/exit`           | `/exit`                  | Exit application (with analytics) |
+
+### 📝 Prompt Management
+
+- `/prompt` : Open the interactive prompt management menu (list, add, edit, remove)
+- `/prompt list` : List all saved prompts
+- `/prompt add <name> -- <prompt>` : Add a new prompt
+- `/prompt edit <name> -- <prompt>` : Edit an existing prompt
+- `/prompt remove <name>` : Remove a prompt
+- `/prompt load <name>` : Send the prompt content as a message to the model
+
+> **Note:** `/prompt` is not chainable and does not support chaining with `&&`. The `--` is only for separating the prompt text, not for chaining.
 
 ## ⚙️ Configuration
 

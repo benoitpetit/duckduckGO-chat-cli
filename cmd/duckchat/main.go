@@ -179,9 +179,9 @@ func executor(input string) {
 
 	// Track command usage
 	if strings.HasPrefix(input, "/") {
-		command := strings.Fields(input)[0]
+		commandName := strings.Fields(input)[0]
 		if chatSession != nil && chatSession.Analytics != nil {
-			chatSession.Analytics.RecordCommand(command)
+			chatSession.Analytics.RecordCommand(commandName)
 		}
 	}
 
@@ -191,7 +191,13 @@ func executor(input string) {
 		return
 	}
 
-	if len(chainedCmd.Commands) > 1 || chainedCmd.Prompt != "" {
+	if len(chainedCmd.Commands) == 1 && !command.IsChainableCommand(chainedCmd.Commands[0].Type) {
+		// Pour les commandes non chainables (ex: /prompt), passer le prompt à handleCommand
+		if chainedCmd.Prompt != "" {
+			chainedCmd.Commands[0].Raw = strings.TrimSpace(chainedCmd.Commands[0].Raw + " -- " + chainedCmd.Prompt)
+		}
+		handleCommand(chatSession, cfg, chainedCmd.Commands[0])
+	} else if len(chainedCmd.Commands) > 1 || chainedCmd.Prompt != "" {
 		handleCommandChain(chatSession, cfg, chainedCmd)
 	} else if len(chainedCmd.Commands) == 1 {
 		handleCommand(chatSession, cfg, chainedCmd.Commands[0])
@@ -319,6 +325,8 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, cmd *command.Comm
 		}
 	case cmd.Type == "/load":
 		chat.HandleLoadCommand(chatSession, cmd.Args)
+	case cmd.Type == "/prompt":
+		chat.HandlePromptCommand(chatSession, cmd.Raw, cfg)
 	default:
 		// Check if the input is potentially pasted content (long text, URLs, etc.)
 		if cfg.ConfirmLongInput && shouldConfirmLongInput(cmd.Raw) {
