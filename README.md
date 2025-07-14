@@ -261,7 +261,7 @@ You: /load 12345
 | 📚 `/library [command] [args]`   | `/library add /path/to/docs` | Manage library directories for bulk file operations |
 | 🌐 `/url <link> [-- prompt]`     | `/url github.com/golang -- Summarize this page` | Add webpage content as context and optionally process it with a prompt  |
 | 📦 `/pmp [path] [options] [-- prompt]` | `/pmp . -i "*.go" -e "test/*"` | Generate structured project prompts with automatic PMP installation |
-| 📝 `/prompt <load|add|edit|remove|list> [name] [-- prompt]` | `/prompt add myprompt -- This is my prompt` | Manage and load custom prompts. Not chainable. |
+| 📝 `/prompt` or `/prompt add <name> -- <prompt>` | `/prompt` or `/prompt add myprompt -- This is my prompt` | Manage and load custom prompts. `/prompt` opens the interactive menu; subcommands are also available. |
 | 📊 `/stats` ✨    | `/stats`                 | Show real-time session analytics and performance metrics |
 | 📡 `/api [port]`         | `/api` or `/api 8080`    | Start or stop the API server    |
 | 🤖 `/model`          | `/model` or `/model 2`   | Change AI model (interactive)   |
