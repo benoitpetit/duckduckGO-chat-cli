@@ -498,7 +498,7 @@ func printCLIUsage(out io.Writer) {
 		command("/search <query>", "Search the web"),
 		command("/file <path>", "Add a local file"),
 		command("/url <url>", "Add a web page"),
-		command("/image [idea]", "Generate an image"),
+		command("/image [idea]", "Generate an image; omit idea for guided options"),
 		command("/speak", "Start a voice chat"),
 		command("/history", "Browse saved conversations"),
 		command("/config", "Change settings"),

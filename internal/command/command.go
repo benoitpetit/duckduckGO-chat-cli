@@ -48,7 +48,7 @@ func GetCommandRegistry() *CommandRegistry {
 			},
 			"/image": {
 				Name:        "/image",
-				Description: "Generate an image from a prompt",
+				Description: "Generate an image; omit idea for guided options",
 				Usage:       "/image [idea]",
 				Category:    "core",
 			},

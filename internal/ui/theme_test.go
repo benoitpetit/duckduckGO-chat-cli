@@ -1,6 +1,9 @@
 package ui
 
-import "testing"
+import (
+	"regexp"
+	"testing"
+)
 
 func TestDraculaAndNordThemesUseTheirSemanticPalettes(t *testing.T) {
 	tests := []struct {
@@ -35,5 +38,24 @@ func TestDraculaAndNordThemesUseTheirSemanticPalettes(t *testing.T) {
 				t.Fatalf("theme palette = %+v, want %+v", theme.Colors, tt.want)
 			}
 		})
+	}
+}
+
+func TestSurveyAccentFormatTracksTheme(t *testing.T) {
+	previous := CurrentTheme().ID
+	t.Cleanup(func() { SetTheme(string(previous)) })
+	formats := map[string]string{}
+	for _, name := range []string{"official", "retro", "dracula", "nord"} {
+		if !SetTheme(name) {
+			t.Fatalf("SetTheme(%q) failed", name)
+		}
+		format := SurveyAccentFormat()
+		if !regexp.MustCompile(`^\d+\+b$`).MatchString(format) {
+			t.Errorf("SurveyAccentFormat() = %q, not a survey color format", format)
+		}
+		formats[name] = format
+	}
+	if formats["official"] == formats["retro"] || formats["dracula"] == formats["nord"] {
+		t.Fatalf("theme accents were not reflected in survey colors: %v", formats)
 	}
 }

@@ -52,15 +52,23 @@ func browse(currentPath string, mode browseMode) (string, error) {
 
 		// Prepare options for the survey prompt
 		options, entryMap := prepareBrowserOptions(entries, mode)
+		browserSummary := []PanelLine{
+			{{Text: "Location  ", Style: PanelAccent}, {Text: currentPath, Style: PanelForeground}},
+			{{Text: "Navigate  ", Style: PanelAccent}, {Text: "Enter opens folders; Enter on a file selects it.", Style: PanelMuted}},
+			{{Text: "Parent    ", Style: PanelAccent}, {Text: "Choose [..] to go up one folder.", Style: PanelMuted}},
+		}
 
 		var choice string
 		prompt := &survey.Select{
-			Message:  "Select a file/directory",
-			Help:     "Current path: " + currentPath,
+			Message:  "Choose a file or folder",
+			Help:     "Use arrows to move, Enter to open or select, Ctrl+C to cancel",
 			Options:  options,
 			PageSize: 20,
+			Description: func(value string, _ int) string {
+				return browserOptionDescription(value, mode)
+			},
 		}
-		err = survey.AskOne(prompt, &choice, survey.WithStdio(os.Stdin, os.Stdout, os.Stderr))
+		err = AskFramedSelect(prompt, &choice, "File browser", browserSummary, survey.WithStdio(os.Stdin, os.Stdout, os.Stderr), ThemedSurveyIcons())
 		if err != nil {
 			return "", fmt.Errorf("prompt failed: %w", err)
 		}
@@ -83,6 +91,22 @@ func browse(currentPath string, mode browseMode) (string, error) {
 			}
 		}
 	}
+}
+
+func browserOptionDescription(value string, mode browseMode) string {
+	switch value {
+	case "[..]":
+		return "parent folder"
+	case "[Select current directory]":
+		return "use this folder"
+	}
+	if strings.HasPrefix(value, "[DIR] ") {
+		return "open folder"
+	}
+	if strings.HasPrefix(value, "[FILE] ") && mode == BrowseFiles {
+		return "select file"
+	}
+	return ""
 }
 
 // prepareBrowserOptions creates a list of strings for the survey prompt.
@@ -151,6 +175,10 @@ func browseMultiSelect(currentPath string) ([]string, error) {
 	if len(options) == 0 {
 		return nil, fmt.Errorf("no files found in this directory")
 	}
+	PrintStyledPanel("Select files", []PanelLine{
+		{{Text: "Location  ", Style: PanelAccent}, {Text: currentPath, Style: PanelForeground}},
+		{{Text: "Select    ", Style: PanelAccent}, {Text: "Space toggles files; Enter confirms.", Style: PanelMuted}},
+	})
 
 	var choices []string
 	prompt := &survey.MultiSelect{
@@ -159,7 +187,7 @@ func browseMultiSelect(currentPath string) ([]string, error) {
 		Options:  options,
 		PageSize: 20,
 	}
-	err = survey.AskOne(prompt, &choices, survey.WithStdio(os.Stdin, os.Stdout, os.Stderr))
+	err = survey.AskOne(prompt, &choices, survey.WithStdio(os.Stdin, os.Stdout, os.Stderr), ThemedSurveyIcons())
 	if err != nil {
 		return nil, fmt.Errorf("prompt failed: %w", err)
 	}

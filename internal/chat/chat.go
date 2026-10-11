@@ -2139,8 +2139,8 @@ func HandleExportCommand(c *Chat, cfg *config.Config) {
 
 func HandleLoadCommand(c *Chat, args string) {
 	if args == "" {
-		// Interactive mode: list sessions and let user choose
-		sessions, err := c.HistoryManager.ListSessions()
+		// Interactive mode: show compact summaries and let the user choose.
+		sessions, err := c.HistoryManager.ListSessionSummaries()
 		if err != nil {
 			ui.Errorln("Error listing sessions: %v", err)
 			return
@@ -2151,25 +2151,32 @@ func HandleLoadCommand(c *Chat, args string) {
 			return
 		}
 
-		options := make([]string, len(sessions))
-		for i, s := range sessions {
-			options[i] = fmt.Sprintf("%s (Started: %s, Messages: %d)", s.ID, s.StartTime.Format("2006-01-02 15:04"), s.Analytics.MessageCount)
-		}
+		options, sessionIDs := buildLoadSessionOptions(sessions)
 
 		var selectedOption string
 		prompt := &survey.Select{
-			Message:  "Select a session to load:",
+			Message:  "Choose a session to restore",
 			Options:  options,
 			PageSize: 10,
 		}
-		err = survey.AskOne(prompt, &selectedOption, survey.WithStdio(os.Stdin, os.Stdout, os.Stderr))
+		summary := []ui.PanelLine{
+			{{Text: fmt.Sprintf("Saved sessions: %d", len(sessions)), Style: ui.PanelAccent}},
+			{{Text: "Each row shows its date, model, message count, and opening message.", Style: ui.PanelMuted}},
+		}
+		err = ui.AskFramedSelect(prompt, &selectedOption, "Load session", summary,
+			survey.WithStdio(os.Stdin, os.Stdout, os.Stderr), ui.ThemedSurveyIcons())
 		if err != nil {
 			ui.Warningln("\nSession load canceled.")
 			return
 		}
 
-		sessionID := strings.Split(selectedOption, " ")[0]
-		loadAndRestoreSession(c, sessionID)
+		for index, option := range options {
+			if option == selectedOption {
+				loadAndRestoreSession(c, sessionIDs[index])
+				return
+			}
+		}
+		ui.Errorln("Could not identify the selected session.")
 
 	} else {
 		// Direct load mode: load session by ID

@@ -115,7 +115,9 @@ Appearance options include the `official`, `retro`, `mono`, `dracula`, and `nord
 
 When an image is added without a prompt, it is attached to your next message. Image input support depends on the selected Duck.ai model. If that model cannot accept images, the CLI uses GPT-5.4 Mini for that request and says so in the chat.
 
-Run `/image` to answer a few questions about style, typography, composition, and format before describing your idea. Or pass an idea directly:
+Run `/image` to open a compact, framed menu for the image description, style, format, and optional reference image. Each setting opens its own submenu. Review the prompt before generating, or return to the menu to adjust the choices.
+
+Pass an idea directly to skip the guided choices and review the generated prompt:
 
 ```text
 /image A small red bird on a snowy branch at sunrise

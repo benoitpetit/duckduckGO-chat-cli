@@ -318,6 +318,36 @@ func TestBuildPayloadEnablesConfiguredNativeTools(t *testing.T) {
 	}
 }
 
+func TestBuildPayloadSendsReferenceImageWithNativeGenerationRequest(t *testing.T) {
+	chat := &Chat{
+		Model:                 "gpt-5.6-luna",
+		Messages:              []Message{{Role: "user", Content: "Create a fox in this visual style", Images: []media.ImageAttachment{{Name: "reference.webp", MIMEType: "image/webp", Data: []byte("webp bytes")}}}},
+		NativeToolsEnabled:    true,
+		NativeImageGeneration: true,
+	}
+	payload := chat.buildPayload(&DurableStream{MessageID: "message", ConversationID: "conversation"})
+	if !payload.CanUseTools || payload.Metadata == nil || !payload.Metadata.ToolChoice.GenerateImage || payload.CanDelegateImageGeneration == nil || !*payload.CanDelegateImageGeneration {
+		t.Fatalf("reference image generation flags = tools:%t metadata:%+v delegate:%v", payload.CanUseTools, payload.Metadata, payload.CanDelegateImageGeneration)
+	}
+	encodedMessage, err := json.Marshal(payload.Messages[0])
+	if err != nil {
+		t.Fatalf("marshal reference image message: %v", err)
+	}
+	var message struct {
+		Content []struct {
+			Type  string `json:"type"`
+			Text  string `json:"text"`
+			Image string `json:"image"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal(encodedMessage, &message); err != nil {
+		t.Fatalf("decode reference image message: %v", err)
+	}
+	if len(message.Content) != 2 || message.Content[0].Type != "text" || message.Content[0].Text != "Create a fox in this visual style" || message.Content[1].Type != "image" || !strings.HasPrefix(message.Content[1].Image, "data:image/webp;base64,") {
+		t.Fatalf("reference image content blocks = %+v", message.Content)
+	}
+}
+
 func TestBuildPayloadKeepsNativeToolsDisabledByDefault(t *testing.T) {
 	payload := (&Chat{Model: "gpt-5.6-luna"}).buildPayload(&DurableStream{})
 	if payload.CanUseTools {
