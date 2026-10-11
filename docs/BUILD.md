@@ -1,82 +1,74 @@
-# Building and verifying releases
+# Build and release
 
-The project requires the Go version declared by `go.mod` (currently Go 1.26).
-Chrome or Chromium 115+ is required at runtime for Duck.ai browser access and
-`/speak`; neither browser is required to compile the CLI. Linux builds do not
-need GTK, WebKitGTK, or GStreamer development packages.
+The project uses the Go version declared in `go.mod` (currently Go 1.26). Chrome or Chromium is needed at runtime for Duck.ai chat and voice, but not to compile the CLI. Linux builds do not require GTK, WebKitGTK, or GStreamer development packages.
 
-`go.mod` replaces `github.com/c-bata/go-prompt` with the checked-in copy in
-`third_party/go-prompt`. That copy includes the resize callback used by the
-interactive prompt, so keep it in the repository when cloning or packaging the
-CLI.
+## Get the source
 
-The resident tray uses a pure-Go tray backend and does not add Linux GTK build
-dependencies. Linux global shortcuts use the desktop portal on Wayland or X11
-key grabs on X11. Windows and macOS use their native shortcut registration;
-macOS can require Accessibility/Input Monitoring permission at runtime.
+```sh
+git clone https://github.com/benoitpetit/duckduckgo-chat-cli.git
+cd duckduckgo-chat-cli
+```
 
-## Run the CLI from source
+The project replaces `github.com/c-bata/go-prompt` with the local copy in `third_party/go-prompt`. Keep that directory when building from a checkout.
 
-From the repository root, start the CLI with the project launcher:
+## Run from source
 
-```bash
+Use the project launcher:
+
+```sh
 ./scripts/run.sh
 ```
 
-The launcher stores Go's cache and temporary files under `build/`, which avoids
-common `/tmp` quota issues. To invoke Go directly, use the package path so it
-includes every CLI source file:
+Or run the CLI package directly:
 
-```bash
-mkdir -p build/go-cache build/go-tmp
-GOCACHE="$PWD/build/go-cache" \
-  TMPDIR="$PWD/build/go-tmp" GOTMPDIR="$PWD/build/go-tmp" \
-  go run ./cmd/duckchat
+```sh
+go run ./cmd/duckchat
 ```
 
-If Chrome or Chromium is missing, install either browser with your operating
-system's package manager and ensure its executable is available to the CLI.
-The interactive chat uses an isolated headless Chromium profile for Duck.ai requests.
-`/speak` opens a separate app-style browser window and requests microphone
-permission when the user starts a call. After the terms are accepted, a normal
-interactive launch also starts or reuses the background tray service. It stays
-in the tray after the terminal closes and can be stopped from the tray menu.
+The launcher stores the Go build cache and temporary files under `build/`. This can help on systems where `/tmp` has a small quota.
 
-## Local release build
+## Build locally
 
-From the repository root, run the build script:
+Build the Linux and Windows release binaries with a semantic version, for example:
 
-```bash
+```sh
 ./scripts/build.sh 1.9.1
 ```
 
-Passing a version builds without an interactive prompt. Omitting it asks for a
-version and confirmation. The script regenerates the REST API documentation,
-builds Linux AMD64 and Windows AMD64 binaries, writes SHA256 files, and creates
-a partial release ZIP under `build/`. macOS binaries are built on native macOS
-runners by the GitHub release workflow, which assembles the complete
-cross-platform ZIP. Checksums use `sha256sum` when available and fall back to
-`shasum -a 256` on macOS.
+The script writes binaries, checksums, and a release archive under `build/`. macOS binaries are built on native macOS GitHub Actions runners and added to the complete release archive.
 
-The Windows executable embeds `docs/images/logo.png` as its application icon.
-The builder uses the pinned `go-winres` tool to create a temporary Windows
-resource object and removes it after the `.exe` is linked.
+The Windows executable embeds `docs/images/logo.png` as its application icon. The build script uses a pinned `go-winres` version to create the Windows resources.
 
-## Pre-release verification
+## Run checks
 
-Run the full local checks with:
+Before opening a pull request, run:
 
-```bash
+```sh
+go test ./...
+go test -race ./...
+go vet ./...
 ./scripts/pre-release-check.sh
 ```
 
-The checks validate the Go version from `go.mod`, module integrity, formatting,
-`go vet`, all Go tests, the Linux build, and a Windows build using the embedded
-logo. The Windows resource generator is pinned in
-`scripts/build_windows_binary.sh` and is downloaded by Go on first use.
+The pre-release script checks the Go version, module integrity, formatting, tests, and Linux and Windows builds. It also confirms that generated API docs match their annotations. The GitHub test workflow adds import, static analysis, security, and cross-compilation checks.
 
-The GitHub Actions workflow uses the same build and verification scripts. Start
-it from **Actions → Build and Release → Run workflow** and provide a semantic
-version such as `1.9.1`. After committing and pushing `master`, the same workflow
-can be dispatched from a terminal with `./scripts/release.sh 1.9.1`; this
-requires an authenticated GitHub CLI (`gh auth login`).
+Generate the API reference after changing annotations in `internal/api/docs.go`:
+
+```sh
+./scripts/generate-docs.sh
+```
+
+Commit the generated files under `docs/` with the source changes.
+
+## Publish a release
+
+Push the release commit to `master`, then start the **Build and Release** workflow from GitHub Actions and enter the version to publish in `X.Y.Z` format. The workflow builds and verifies the platform binaries, creates the matching tag, and publishes the GitHub release.
+
+You can dispatch the same workflow from a terminal after authenticating `gh`:
+
+```sh
+gh auth login
+./scripts/release.sh 1.9.1
+```
+
+Replace `1.9.1` with the version to publish. The release script checks that the working tree is clean, the current commit matches `origin/master`, and the version tag is unused before dispatching the workflow.
