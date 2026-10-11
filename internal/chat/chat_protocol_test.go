@@ -81,6 +81,95 @@ func TestMessageMarshalJSONUsesDuckAIMultimodalBlocks(t *testing.T) {
 	}
 }
 
+func TestMessageMarshalJSONIncludesImageModerationToken(t *testing.T) {
+	data, err := json.Marshal(Message{
+		Role:    "user",
+		Content: "edit this image",
+		Images: []media.ImageAttachment{{
+			Name: "input.png", MIMEType: "image/png", Data: []byte{1, 2, 3},
+			ModerationToken: "validated-image-token",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	var got struct {
+		Content []struct {
+			Type            string `json:"type"`
+			ModerationToken string `json:"moderationToken"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("decode multimodal message: %v", err)
+	}
+	if len(got.Content) != 2 || got.Content[1].Type != "image" || got.Content[1].ModerationToken != "validated-image-token" {
+		t.Fatalf("image content = %+v, want image block with moderation token", got.Content)
+	}
+}
+
+func TestBuildPayloadKeepsImageConversationTextBlocksAndFlags(t *testing.T) {
+	chat := &Chat{
+		Model: "gpt-6-luna",
+		Messages: []Message{
+			{Role: "user", Content: "before image"},
+			{Role: "assistant", Content: "ready"},
+			{Role: "user", Content: "edit this", Images: []media.ImageAttachment{{
+				Name: "input.png", MIMEType: "image/png", Data: []byte{1, 2, 3}, ModerationToken: "token",
+			}}},
+			{Role: "assistant", Content: "first edit"},
+			{Role: "user", Content: "make the sky blue"},
+		},
+	}
+
+	payload := chat.buildPayload(&DurableStream{MessageID: "message", ConversationID: "conversation"})
+	if payload.CanUseTools != true || payload.CanShowGreeting != true || payload.CanDelegateImageGeneration != nil {
+		t.Fatalf("image request flags = canUseTools:%t canShowGreeting:%t canDelegateImageGeneration:%v", payload.CanUseTools, payload.CanShowGreeting, payload.CanDelegateImageGeneration)
+	}
+	if len(payload.Messages) != 5 {
+		t.Fatalf("payload has %d messages, want 5", len(payload.Messages))
+	}
+	if payload.Messages[0].Content != "before image" {
+		t.Fatalf("text before first image changed to %q", payload.Messages[0].Content)
+	}
+	for _, index := range []int{2, 4} {
+		encoded, err := json.Marshal(payload.Messages[index])
+		if err != nil {
+			t.Fatalf("marshal message %d: %v", index, err)
+		}
+		var decoded struct {
+			Content []struct {
+				Type            string `json:"type"`
+				Text            string `json:"text"`
+				ModerationToken string `json:"moderationToken"`
+			} `json:"content"`
+		}
+		if err := json.Unmarshal(encoded, &decoded); err != nil {
+			t.Fatalf("decode message %d: %v", index, err)
+		}
+		if len(decoded.Content) == 0 || decoded.Content[0].Type != "text" {
+			t.Fatalf("message %d content = %+v, want leading text block", index, decoded.Content)
+		}
+		if index == 2 && (len(decoded.Content) != 2 || decoded.Content[1].ModerationToken != "token") {
+			t.Fatalf("image message content = %+v, want image block with validation token", decoded.Content)
+		}
+		if index == 4 && (len(decoded.Content) != 1 || decoded.Content[0].Text != "make the sky blue") {
+			t.Fatalf("follow-up user content = %+v, want text block", decoded.Content)
+		}
+	}
+
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	var flags map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &flags); err != nil {
+		t.Fatalf("decode payload flags: %v", err)
+	}
+	if string(flags["canDelegateImageGeneration"]) != "null" {
+		t.Fatalf("canDelegateImageGeneration = %s, want explicit null", flags["canDelegateImageGeneration"])
+	}
+}
+
 func TestRestoreContextPreservesImageAttachmentsThroughOptimization(t *testing.T) {
 	original := intelligence.Message{Role: "user", Content: "What is in this picture?", Images: []media.ImageAttachment{{Name: "logo.png", MIMEType: "image/png", Data: []byte{1, 2, 3}}}}
 	chat := &Chat{}
@@ -314,6 +403,19 @@ func TestParseSSEEventLine(t *testing.T) {
 				t.Fatalf("image data = %q, want AQID", event.ImageBase64)
 			}
 		})
+	}
+}
+
+func TestParseAndRememberImageValidationToken(t *testing.T) {
+	line := `data: {"action":"success","role":"image-validated","tokens":[{"kind":"user-content","messageIndex":0,"contentIndex":0,"moderationToken":"validated-token"}]}`
+	event, ok := parseSSEEventLine(line)
+	if !ok || event.Type != "image_validated" || len(event.imageValidationTokens) != 1 {
+		t.Fatalf("parsed event = %+v, ok=%t; want image validation event", event, ok)
+	}
+	chat := &Chat{Messages: []Message{{Role: "user", Images: []media.ImageAttachment{{Name: "input.png"}}}}}
+	chat.rememberImageValidationTokens(event.imageValidationTokens)
+	if got := chat.Messages[0].Images[0].ModerationToken; got != "validated-token" {
+		t.Fatalf("remembered moderation token = %q, want validated-token", got)
 	}
 }
 

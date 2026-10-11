@@ -32,7 +32,7 @@ The launcher stores the Go build cache and temporary files under `build/`. This 
 Build the Linux and Windows release binaries with a semantic version, for example:
 
 ```sh
-./scripts/build.sh 1.9.1
+./scripts/build.sh 1.9.2
 ```
 
 The script writes binaries, checksums, and a release archive under `build/`. macOS binaries are built on native macOS GitHub Actions runners and added to the complete release archive.
@@ -68,7 +68,7 @@ You can dispatch the same workflow from a terminal after authenticating `gh`:
 
 ```sh
 gh auth login
-./scripts/release.sh 1.9.1
+./scripts/release.sh 1.9.2
 ```
 
-Replace `1.9.1` with the version to publish. The release script checks that the working tree is clean, the current commit matches `origin/master`, and the version tag is unused before dispatching the workflow.
+Replace `1.9.2` with the version to publish. The release script checks that the working tree is clean, the current commit matches `origin/master`, and the version tag is unused before dispatching the workflow.

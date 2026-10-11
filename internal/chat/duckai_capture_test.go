@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 )
 
@@ -579,6 +580,27 @@ func TestCaptureDynamicHeadersDelegatesToSharedManager(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("CaptureDynamicHeaders() = %+v, want %+v", got, want)
+	}
+}
+
+func TestHeadersFromCDPRetainsDuckAIImageRequestHeaders(t *testing.T) {
+	got := headersFromCDP(network.Headers{
+		"x-duckai-continuation":  "continuation-value",
+		"x-duckai-response-id":   "response-value",
+		"x-duckai-tool-approval": "approval-value",
+		"cookie":                 "session-cookie",
+	})
+	for name, want := range map[string]string{
+		"x-duckai-continuation":  "continuation-value",
+		"x-duckai-response-id":   "response-value",
+		"x-duckai-tool-approval": "approval-value",
+	} {
+		if value := got.BrowserHeaders[name]; value != want {
+			t.Errorf("BrowserHeaders[%q] = %q, want %q", name, value, want)
+		}
+	}
+	if _, ok := got.BrowserHeaders["cookie"]; ok {
+		t.Fatal("browser cookies must not be copied into dynamic request headers")
 	}
 }
 

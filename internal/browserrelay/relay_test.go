@@ -16,6 +16,33 @@ import (
 	"time"
 )
 
+func TestFilterRequestHeadersKeepsDuckAIImageHeaders(t *testing.T) {
+	input := make(http.Header)
+	input.Set("Accept", "text/event-stream")
+	input.Set("X-Duckai-Continuation", "continuation-value")
+	input.Set("X-Duckai-Response-Id", "response-value")
+	input.Set("X-Duckai-Tool-Approval", "approval-value")
+	input.Set("Cookie", "session-cookie")
+	input.Set("X-Unrecognized", "drop-me")
+
+	filtered := FilterRequestHeaders(input)
+	for name, want := range map[string]string{
+		"Accept":                 "text/event-stream",
+		"X-Duckai-Continuation":  "continuation-value",
+		"X-Duckai-Response-Id":   "response-value",
+		"X-Duckai-Tool-Approval": "approval-value",
+	} {
+		if got := filtered.Get(name); got != want {
+			t.Errorf("filtered %s = %q, want %q", name, got, want)
+		}
+	}
+	for _, forbidden := range []string{"Cookie", "X-Unrecognized"} {
+		if got := filtered.Get(forbidden); got != "" {
+			t.Errorf("filtered headers retained %s = %q", forbidden, got)
+		}
+	}
+}
+
 func TestRelayStreamsOneAuthenticatedBrowserResponse(t *testing.T) {
 	var relayEndpoint, relayToken string
 	simulationDone := make(chan struct{})

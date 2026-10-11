@@ -647,7 +647,8 @@ func headersFromCDP(raw network.Headers) *DynamicHeaders {
 		case "accept-language":
 			headers.AcceptLanguage = fmt.Sprint(value)
 		case "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform",
-			"sec-fetch-dest", "sec-fetch-mode", "sec-fetch-site", "sec-gpc", "dnt", "priority":
+			"sec-fetch-dest", "sec-fetch-mode", "sec-fetch-site", "sec-gpc", "dnt", "priority",
+			"x-duckai-continuation", "x-duckai-response-id", "x-duckai-tool-approval":
 			if headers.BrowserHeaders == nil {
 				headers.BrowserHeaders = make(map[string]string)
 			}

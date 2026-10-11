@@ -25,9 +25,10 @@ const (
 
 // ImageAttachment stores a local image for a chat message or session archive.
 type ImageAttachment struct {
-	Name     string `json:"name"`
-	MIMEType string `json:"mime_type"`
-	Data     []byte `json:"data,omitempty"`
+	Name            string `json:"name"`
+	MIMEType        string `json:"mime_type"`
+	Data            []byte `json:"data,omitempty"`
+	ModerationToken string `json:"-"`
 }
 
 // ReadImage reads a supported image, scales it to Duck.ai's current 512-pixel

@@ -90,10 +90,11 @@ type BrowserRetryer interface {
 }
 
 type Message struct {
-	Content   string                  `json:"content"`
-	Role      string                  `json:"role"`
-	Images    []media.ImageAttachment `json:"-"`
-	Timestamp time.Time               `json:"-"`
+	Content                string                  `json:"content"`
+	Role                   string                  `json:"role"`
+	Images                 []media.ImageAttachment `json:"-"`
+	Timestamp              time.Time               `json:"-"`
+	forceTextContentBlocks bool                    // Duck.ai uses text blocks for later user turns in image chats.
 }
 
 var ErrRateLimited = errors.New("Duck.ai rate limit reached (HTTP 429). Try again later.")
@@ -140,16 +141,17 @@ func recoveryErrorDetail(err error) string {
 }
 
 func (m Message) MarshalJSON() ([]byte, error) {
-	if len(m.Images) == 0 {
+	if len(m.Images) == 0 && !m.forceTextContentBlocks {
 		type textMessage Message
 		return json.Marshal(textMessage(m))
 	}
 
 	type contentBlock struct {
-		Type     string `json:"type"`
-		Text     string `json:"text,omitempty"`
-		MIMEType string `json:"mimeType,omitempty"`
-		Image    string `json:"image,omitempty"`
+		Type            string `json:"type"`
+		Text            string `json:"text,omitempty"`
+		MIMEType        string `json:"mimeType,omitempty"`
+		Image           string `json:"image,omitempty"`
+		ModerationToken string `json:"moderationToken,omitempty"`
 	}
 	type multimodalMessage struct {
 		Role    string         `json:"role"`
@@ -159,9 +161,10 @@ func (m Message) MarshalJSON() ([]byte, error) {
 	blocks = append(blocks, contentBlock{Type: "text", Text: m.Content})
 	for _, attachment := range m.Images {
 		blocks = append(blocks, contentBlock{
-			Type:     "image",
-			MIMEType: attachment.MIMEType,
-			Image:    "data:" + attachment.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(attachment.Data),
+			Type:            "image",
+			MIMEType:        attachment.MIMEType,
+			Image:           "data:" + attachment.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(attachment.Data),
+			ModerationToken: attachment.ModerationToken,
 		})
 	}
 	return json.Marshal(multimodalMessage{Role: m.Role, Content: blocks})
@@ -202,7 +205,8 @@ type ChatPayload struct {
 	Messages                   []Message      `json:"messages"`
 	CanUseTools                bool           `json:"canUseTools"`
 	CanUseApproxLocation       *bool          `json:"canUseApproxLocation"`
-	CanDelegateImageGeneration *bool          `json:"canDelegateImageGeneration,omitempty"`
+	CanShowGreeting            bool           `json:"canShowGreeting"`
+	CanDelegateImageGeneration *bool          `json:"canDelegateImageGeneration"`
 	ReasoningEffort            string         `json:"reasoningEffort"`
 	DurableStream              *DurableStream `json:"durableStream"`
 }
@@ -212,22 +216,29 @@ type ChatPayload struct {
 // and tool events expose native tool activity without leaking protocol JSON to
 // the terminal renderer.
 type StreamEvent struct {
-	Type        string
-	Message     string
-	State       string
-	Status      string
-	ToolName    string
-	ToolCallID  string
-	ToolArgs    string
-	ToolResult  string
-	SourceURL   string
-	SourceTitle string
-	ImageURL    string
-	ImageBase64 string
-	ImageFormat string
-	ImageWidth  int
-	ImageHeight int
-	Raw         string
+	Type                  string
+	Message               string
+	State                 string
+	Status                string
+	ToolName              string
+	ToolCallID            string
+	ToolArgs              string
+	ToolResult            string
+	SourceURL             string
+	SourceTitle           string
+	ImageURL              string
+	ImageBase64           string
+	ImageFormat           string
+	ImageWidth            int
+	ImageHeight           int
+	Raw                   string
+	imageValidationTokens []imageValidationToken
+}
+
+type imageValidationToken struct {
+	MessageIndex    int    `json:"messageIndex"`
+	ContentIndex    int    `json:"contentIndex"`
+	ModerationToken string `json:"moderationToken"`
 }
 
 func InitializeSession(cfg *config.Config) *Chat {
@@ -978,6 +989,9 @@ func (c *Chat) fetchEventStreamContextWithProgress(ctx context.Context, content 
 			if !ok {
 				continue
 			}
+			if event.Type == "image_validated" {
+				c.rememberImageValidationTokens(event.imageValidationTokens)
+			}
 			if status := normalizeStreamStatus(eventName, ""); status != "" && (event.Type == "meta" || event.Type == "raw") {
 				event = StreamEvent{Type: "status", Status: status}
 			}
@@ -1009,6 +1023,19 @@ func (c *Chat) fetchEventStreamContextWithProgress(ctx context.Context, content 
 	return stream, nil
 }
 
+func (c *Chat) rememberImageValidationTokens(tokens []imageValidationToken) {
+	for _, validation := range tokens {
+		if validation.ModerationToken == "" || validation.MessageIndex < 0 || validation.MessageIndex >= len(c.Messages) {
+			continue
+		}
+		images := c.Messages[validation.MessageIndex].Images
+		if validation.ContentIndex < 0 || validation.ContentIndex >= len(images) {
+			continue
+		}
+		images[validation.ContentIndex].ModerationToken = validation.ModerationToken
+	}
+}
+
 func parseSSEEventLine(line string) (StreamEvent, bool) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "data:") {
@@ -1029,6 +1056,7 @@ func parseSSEEventLine(line string) (StreamEvent, bool) {
 	}
 
 	var message struct {
+		Action        string          `json:"action"`
 		Role          string          `json:"role"`
 		Name          string          `json:"name"`
 		Message       string          `json:"message"`
@@ -1042,10 +1070,11 @@ func parseSSEEventLine(line string) (StreamEvent, bool) {
 			URL   string `json:"url"`
 			Title string `json:"title"`
 		} `json:"source"`
-		ImageURL    string          `json:"imageUrl"`
-		ImageURLAlt string          `json:"image_url"`
-		URL         string          `json:"url"`
-		Data        json.RawMessage `json:"data"`
+		ImageURL    string                 `json:"imageUrl"`
+		ImageURLAlt string                 `json:"image_url"`
+		URL         string                 `json:"url"`
+		Data        json.RawMessage        `json:"data"`
+		Tokens      []imageValidationToken `json:"tokens"`
 	}
 	if err := json.Unmarshal([]byte(payload), &message); err != nil {
 		return StreamEvent{Type: "raw", Raw: payload}, true
@@ -1061,6 +1090,9 @@ func parseSSEEventLine(line string) (StreamEvent, bool) {
 	}
 	if message.Role == "source" && message.Source != nil {
 		return StreamEvent{Type: "source", SourceURL: message.Source.URL, SourceTitle: message.Source.Title}, true
+	}
+	if message.Role == "image-validated" {
+		return StreamEvent{Type: "image_validated", imageValidationTokens: message.Tokens}, true
 	}
 	if message.Role == "tool-invocation" {
 		event := StreamEvent{Type: "tool", State: message.State, ToolName: message.ToolName, ToolCallID: message.ToolCallID, Raw: payload}
@@ -1639,14 +1671,33 @@ func (c *Chat) buildPayload(durableStream *DurableStream) ChatPayload {
 	if c.Model == models.GPTOSS120B || c.Model == models.Gemma431B {
 		reasoningEffort = "low"
 	}
+	hasImages := hasImageAttachments(c.Messages)
+	nativeToolsRequested := c.NativeToolsEnabled && (c.NativeWebSearch || c.NativeImageGeneration)
+	messages := c.Messages
+	if hasImages {
+		// Keep user turns after the first image in multimodal block format,
+		// while leaving earlier text-only turns in their original format.
+		messages = append([]Message(nil), c.Messages...)
+		seenImage := false
+		for i := range messages {
+			if len(messages[i].Images) > 0 {
+				seenImage = true
+				continue
+			}
+			if seenImage && messages[i].Role == "user" {
+				messages[i].forceTextContentBlocks = true
+			}
+		}
+	}
 	payload := ChatPayload{
 		Model:           c.Model,
-		Messages:        c.Messages,
-		CanUseTools:     c.NativeToolsEnabled && (c.NativeWebSearch || c.NativeImageGeneration),
+		Messages:        messages,
+		CanUseTools:     hasImages || nativeToolsRequested,
+		CanShowGreeting: true,
 		ReasoningEffort: reasoningEffort,
 		DurableStream:   durableStream,
 	}
-	if payload.CanUseTools {
+	if nativeToolsRequested {
 		payload.Metadata = &Metadata{ToolChoice: ToolChoice{
 			WebSearch:     c.NativeWebSearch,
 			GenerateImage: c.NativeImageGeneration,
@@ -1669,6 +1720,7 @@ func redactDebugHeaders(headers http.Header) http.Header {
 	redacted := headers.Clone()
 	for _, name := range []string{
 		"Authorization", "Cookie", "Set-Cookie", "X-Vqd-4", "X-Vqd-Hash-1", "X-Fe-Signals",
+		"X-Duckai-Continuation", "X-Duckai-Response-Id", "X-Duckai-Tool-Approval",
 	} {
 		if _, exists := redacted[http.CanonicalHeaderKey(name)]; exists {
 			redacted.Set(name, "[REDACTED]")

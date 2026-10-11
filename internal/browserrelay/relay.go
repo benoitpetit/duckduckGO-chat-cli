@@ -539,7 +539,8 @@ func validateRequest(request Request) error {
 func FilterRequestHeaders(headers http.Header) http.Header {
 	allowed := map[string]struct{}{
 		"accept": {}, "content-type": {}, "x-vqd-hash-1": {}, "x-fe-signals": {},
-		"x-fe-version": {}, "x-ddg-journey-id": {},
+		"x-fe-version": {}, "x-ddg-journey-id": {}, "x-duckai-continuation": {},
+		"x-duckai-response-id": {}, "x-duckai-tool-approval": {},
 	}
 	filtered := make(http.Header)
 	for name, values := range headers {
