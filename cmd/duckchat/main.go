@@ -41,9 +41,6 @@ import (
 // Version will be set at build time via ldflags
 var Version = "dev"
 
-// cliUsageLogoInset is how many rows of logo sit above "Usage:" in --help.
-const cliUsageLogoInset = 4
-
 var chatSession *chat.Chat
 var cfg *config.Config
 var dashboardServer *dashboard.Server
@@ -476,20 +473,39 @@ func parseCLIOptions(args []string) (cliOptions, error) {
 }
 
 func printCLIUsage(out io.Writer) {
-	// PrintLogoBesideInset prints these lines next to the logo, or above it on a
-	// narrow terminal, and writes them verbatim when there is no logo to draw.
-	// The inset drops the usage block a little below the top of the mascot so
-	// the two read as a header rather than two stacked columns.
-	_ = ui.PrintLogoBesideInset(out, []string{
-		"Usage: duckchat [options]",
+	accent := func(value string) string { return ui.AccentColor.Sprint(value) }
+	muted := func(value string) string { return ui.MutedColor.Sprint(value) }
+	command := func(name, description string) string {
+		return "  " + accent(fmt.Sprintf("%-20s", name)) + muted(description)
+	}
+
+	lines := []string{
+		accent("Usage: duckchat [options]"),
 		"",
-		"Options:",
-		"  -h, --help          Show this help message",
-		"      --version       Show version information",
-		"      --prompt TEXT   Send one prompt and exit; use - to read from stdin",
-		"      --model ID      Select a model for --prompt",
-		"      --json          Output one-shot response as JSON",
-	}, cliUsageLogoInset)
+		accent("Options:"),
+		command("-h, --help", "Show this help message"),
+		command("--version", "Show version information"),
+		command("--prompt TEXT", "Send one prompt and exit; use - to read from stdin"),
+		command("--model ID", "Select a model for --prompt"),
+		command("--json", "Output one-shot response as JSON"),
+		"",
+		accent("Interactive chat:"),
+		"  Run with no arguments to start an interactive chat.",
+		"  Type /help at the You: prompt for the full command list.",
+		"",
+		accent("Common chat commands:"),
+		command("/model [name]", "Change the model"),
+		command("/search <query>", "Search the web"),
+		command("/file <path>", "Add a local file"),
+		command("/url <url>", "Add a web page"),
+		command("/image [idea]", "Generate an image"),
+		command("/speak", "Start a voice chat"),
+		command("/history", "Browse saved conversations"),
+		command("/config", "Change settings"),
+		command("/clear", "Start a fresh chat"),
+		command("/exit", "Close the chat"),
+	}
+	_, _ = fmt.Fprintln(out, strings.Join(lines, "\n"))
 }
 
 func writeJSON(value any) error {

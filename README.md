@@ -41,19 +41,19 @@
 
 ### Terminal
 
-| Interactive help | Voice conversation | Session statistics |
-|:--|:--|:--|
-| <a href="docs/images/cli-help.png"><img src="docs/images/cli-help.png" alt="DuckChat help screen with the command list" width="300"></a> | <a href="docs/images/voice-session.png"><img src="docs/images/voice-session.png" alt="DuckChat voice controls and transcript" width="300"></a> | <a href="docs/images/session-stats.png"><img src="docs/images/session-stats.png" alt="DuckChat session statistics" width="300"></a> |
-| The `/help` command list. | A live voice session with controls and subtitles. | Session duration, usage, and model statistics. |
+| Interactive help                                                                                                                         | Voice conversation                                                                                                                             | Session statistics                                                                                                                  |
+| :--------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------- |
+| <a href="docs/images/cli-help.png"><img src="docs/images/cli-help.png" alt="DuckChat interactive help screen with the command list" width="300"></a> | <a href="docs/images/voice-session.png"><img src="docs/images/voice-session.png" alt="DuckChat voice controls and transcript" width="300"></a> | <a href="docs/images/session-stats.png"><img src="docs/images/session-stats.png" alt="DuckChat session statistics" width="300"></a> |
+| The `/help` command list.                                                                                                                | A live voice session with controls and subtitles.                                                                                              | Session duration, usage, and model statistics.                                                                                      |
 
 ### Local dashboard
 
 The dashboard screenshots use representative sample metrics.
 
-| Overview | Activity | Command reference |
-|:--|:--|:--|
+| Overview                                                                                                                                      | Activity                                                                                                                                   | Command reference                                                                                                                                      |
+| :-------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | <a href="docs/images/dashboard-overview.png"><img src="docs/images/dashboard-overview.png" alt="DuckChat dashboard overview" width="300"></a> | <a href="docs/images/dashboard-activity.png"><img src="docs/images/dashboard-activity.png" alt="DuckChat recent activity" width="300"></a> | <a href="docs/images/dashboard-commands.png"><img src="docs/images/dashboard-commands.png" alt="DuckChat dashboard command reference" width="300"></a> |
-| Usage charts and model statistics. | Recent CLI activity. | The dashboard's command reference. |
+| Usage charts and model statistics.                                                                                                            | Recent CLI activity.                                                                                                                       | The dashboard's command reference.                                                                                                                     |
 
 ## Installation
 
@@ -65,13 +65,13 @@ To build from source, see the [build and release guide](docs/BUILD.md).
 
 ## Usage
 
-Start the downloaded CLI, accept Duck.ai's terms on first use, and enter a message. Run `/help` at any time to show the command list.
+Run `duckchat` with no arguments to open the interactive mode. Accept Duck.ai's terms on first use, then enter messages or slash commands at the `You:` prompt. Use `/help` inside the chat for the complete command list. `duckchat --help` describes launch options and highlights common chat commands.
 
 The examples below use `duckchat` as the executable name. If you keep the release asset's original filename, use that filename in its place.
 
-### Command-line options
+### Command-line options (when launching)
 
-Use `--help` or `--version` without opening an interactive chat. Send a single prompt with `--prompt`; choose a model with `--model`, or use `--json` for machine-readable output. Pass `-` to read a prompt from standard input:
+These flags are passed to `duckchat` when you launch it from the terminal. Use `--help` or `--version` without opening an interactive chat. Send a single prompt with `--prompt`; choose a model with `--model`, or use `--json` for machine-readable output. Pass `-` to read a prompt from standard input:
 
 ```sh
 duckchat --help
@@ -80,46 +80,59 @@ duckchat --prompt "Summarize this input" --json
 printf 'Summarize this input' | duckchat --prompt -
 ```
 
+<img src="docs/images/cli-options-help.png" alt="The standard duckchat --help output with launch options and common interactive commands" width="520">
+
 The first interactive run must accept Duck.ai's terms before one-shot prompts can run without a terminal. One-shot mode writes the answer to standard output and status or error messages to standard error. JSON mode writes one response or error object. It does not start the tray service, dashboard, API, or startup update check.
 
-### Command reference
+### Command reference (interactive chat)
+
+Start the interactive chat with no arguments:
+
+```sh
+duckchat
+You: /help
+```
+
+These slash commands are typed at the `You:` prompt after the interactive chat starts. They are different from the launch options above. Type `/help` in the chat to show the full list.
+
+<img src="docs/images/cli-help.png" alt="The interactive /help command reference grouped by category" width="700">
 
 #### Chat and settings
 
-| Command | Description |
-| --- | --- |
-| `/help` | Show the command list |
-| `/model [model_name]` | Choose or change the model |
-| `/config` | Change the model, appearance, shortcuts, and app settings |
-| `/clear` | Start a fresh chat and Duck.ai session |
-| `/stats` | View current session statistics |
-| `/history` | Browse saved conversations |
-| `/load [session_id]` | Restore a saved conversation |
-| `/speak` | Start or restore a voice conversation |
-| `/image [idea]` | Generate an image, with an optional guided prompt flow |
+| Command               | Description                                               |
+| --------------------- | --------------------------------------------------------- |
+| `/help`               | Show the command list                                     |
+| `/model [model_name]` | Choose or change the model                                |
+| `/config`             | Change the model, appearance, shortcuts, and app settings |
+| `/clear`              | Start a fresh chat and Duck.ai session                    |
+| `/stats`              | View current session statistics                           |
+| `/history`            | Browse saved conversations                                |
+| `/load [session_id]`  | Restore a saved conversation                              |
+| `/speak`              | Start or restore a voice conversation                     |
+| `/image [idea]`       | Generate an image, with an optional guided prompt flow    |
 
 #### Add context and manage prompts
 
-| Command | Description |
-| --- | --- |
-| `/search <query> [-- prompt]` | Search the web and use results as chat context |
-| `/file <path> [-- prompt]` | Add a file to chat or ask about it directly |
-| `/url <url> [-- prompt]` | Add a web page to chat or ask about it directly |
+| Command                                 | Description                                       |
+| --------------------------------------- | ------------------------------------------------- |
+| `/search <query> [-- prompt]`           | Search the web and use results as chat context    |
+| `/file <path> [-- prompt]`              | Add a file to chat or ask about it directly       |
+| `/url <url> [-- prompt]`                | Add a web page to chat or ask about it directly   |
 | `/library [command] [args] [-- prompt]` | Manage local file libraries and use their content |
-| `/prompt [command]` | Add, edit, list, load, or remove saved prompts |
+| `/prompt [command]`                     | Add, edit, list, load, or remove saved prompts    |
 
 #### Export and services
 
-| Command | Description |
-| --- | --- |
-| `/copy` | Copy the last response or a code block |
-| `/export` | Export conversation content |
-| `/issue` | Fill in a report and open a prefilled GitHub issue |
-| `/dashboard <on\|off\|open\|status>` | Start, stop, open, or check the local dashboard |
-| `/api [port]` | Start or stop the local HTTP API |
-| `/update [--force]` | Check for or install an update |
-| `/version` | Show version information |
-| `/exit` | Close the interactive chat |
+| Command                              | Description                                        |
+| ------------------------------------ | -------------------------------------------------- |
+| `/copy`                              | Copy the last response or a code block             |
+| `/export`                            | Export conversation content                        |
+| `/issue`                             | Fill in a report and open a prefilled GitHub issue |
+| `/dashboard <on\|off\|open\|status>` | Start, stop, open, or check the local dashboard    |
+| `/api [port]`                        | Start or stop the local HTTP API                   |
+| `/update [--force]`                  | Check for or install an update                     |
+| `/version`                           | Show version information                           |
+| `/exit`                              | Close the interactive chat                         |
 
 Use `&&` to combine `/file`, `/url`, and `/search` before a prompt. `/library`, `/prompt`, `/image`, and `/speak` are standalone commands. The [user guide](docs/USAGE.md) has examples and more detail about each command.
 
@@ -137,16 +150,16 @@ The normal interactive launch can also stay in the system tray after the termina
 
 Choose a model with `/model`, or pass its ID with `--model` in one-shot mode. Duck.ai controls model availability and names, which can change.
 
-| Model | ID |
-| --- | --- |
-| GPT-6 Luna | `gpt-6-luna` |
-| GPT-5.6 Luna | `gpt-5.6-luna` |
-| GPT-5.4 Nano | `gpt-5.4-nano` |
-| GPT-5.4 Mini | `gpt-5.4-mini` |
-| Claude Haiku 4.5 | `claude-haiku-4-5` |
-| Mistral Small 4 | `mistral-small-2603` |
-| GPT OSS 120B | `tinfoil/gpt-oss-120b` |
-| Gemma 4 31B | `tinfoil/gemma4-31b` |
+| Model            | ID                     |
+| ---------------- | ---------------------- |
+| GPT-6 Luna       | `gpt-6-luna`           |
+| GPT-5.6 Luna     | `gpt-5.6-luna`         |
+| GPT-5.4 Nano     | `gpt-5.4-nano`         |
+| GPT-5.4 Mini     | `gpt-5.4-mini`         |
+| Claude Haiku 4.5 | `claude-haiku-4-5`     |
+| Mistral Small 4  | `mistral-small-2603`   |
+| GPT OSS 120B     | `tinfoil/gpt-oss-120b` |
+| Gemma 4 31B      | `tinfoil/gemma4-31b`   |
 
 ## Configuration
 
