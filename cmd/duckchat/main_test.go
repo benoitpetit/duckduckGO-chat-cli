@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"image"
+	"image/png"
 	"math"
 	"os"
 	"path/filepath"
@@ -194,7 +197,11 @@ func TestCommandChainAddsValidImageToProcessorContext(t *testing.T) {
 	t.Cleanup(func() { dashboardActivity = previousActivity })
 
 	path := filepath.Join(t.TempDir(), "logo.png")
-	if err := os.WriteFile(path, []byte("\x89PNG\r\n\x1a\nimage"), 0600); err != nil {
+	var pngData bytes.Buffer
+	if err := png.Encode(&pngData, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, pngData.Bytes(), 0600); err != nil {
 		t.Fatal(err)
 	}
 	chatSession := &chat.Chat{}

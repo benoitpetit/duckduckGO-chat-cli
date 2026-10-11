@@ -1,8 +1,12 @@
 package chat
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +18,13 @@ import (
 	"duckduckgo-chat-cli/internal/models"
 )
 
-var testPNG = []byte("\x89PNG\r\n\x1a\nimage")
+var testPNG = func() []byte {
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		panic(err)
+	}
+	return encoded.Bytes()
+}()
 
 func writeTestPNG(t *testing.T) string {
 	t.Helper()
@@ -65,14 +75,18 @@ func TestPromptWithInsertedContextSplitsRoleTokenEstimates(t *testing.T) {
 
 func TestImageFileContextQueuesImageForNextPrompt(t *testing.T) {
 	path := writeTestPNG(t)
+	expected, err := media.ReadImage(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	c := &Chat{}
 	handleFileCommand(c, "/file "+path, &config.Config{}, nil, func(*Chat, string, *config.Config) {})
 
 	if len(c.pendingImages) != 1 {
 		t.Fatalf("pending image count = %d, want 1", len(c.pendingImages))
 	}
-	if c.pendingImages[0].Name != "logo.png" || string(c.pendingImages[0].Data) != string(testPNG) {
-		t.Fatalf("pending image = %+v, want logo.png and original bytes", c.pendingImages[0])
+	if c.pendingImages[0].Name != expected.Name || c.pendingImages[0].MIMEType != "image/webp" || !bytes.Equal(c.pendingImages[0].Data, expected.Data) {
+		t.Fatalf("pending image = %+v, want the normalized WebP attachment", c.pendingImages[0])
 	}
 	if len(c.Messages) != 0 {
 		t.Fatalf("queued image was inserted as a separate message: %+v", c.Messages)
@@ -81,6 +95,10 @@ func TestImageFileContextQueuesImageForNextPrompt(t *testing.T) {
 
 func TestImageFilePromptQueuesAttachmentWithPrompt(t *testing.T) {
 	path := writeTestPNG(t)
+	expected, err := media.ReadImage(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	c := &Chat{}
 	var requested string
 	var message Message
@@ -105,8 +123,15 @@ func TestImageFilePromptQueuesAttachmentWithPrompt(t *testing.T) {
 	if requested != "describe this duck" {
 		t.Fatalf("requested prompt = %q, want %q", requested, "describe this duck")
 	}
-	if message.Content != requested || len(message.Images) != 1 || string(message.Images[0].Data) != string(testPNG) {
+	if message.Content != requested || len(message.Images) != 1 || message.Images[0].MIMEType != "image/webp" || !bytes.Equal(message.Images[0].Data, expected.Data) {
 		t.Fatalf("submitted user message = %+v, want prompt and image in one message", message)
+	}
+	wireMessage, err := json.Marshal(message)
+	if err != nil {
+		t.Fatalf("serialize image message: %v", err)
+	}
+	if !bytes.Contains(wireMessage, []byte(`"mimeType":"image/webp"`)) || !bytes.Contains(wireMessage, []byte(`"image":"data:image/webp;base64,`)) {
+		t.Fatalf("serialized image message does not match Duck.ai's WebP image block format: %s", wireMessage)
 	}
 }
 

@@ -10,18 +10,30 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/gen2brain/webp"
 )
 
 func TestReadImageAcceptsPNGJPEGAndWebP(t *testing.T) {
+	source := testImage(96, 64)
+	var jpegData, pngData, webpData bytes.Buffer
+	if err := jpeg.Encode(&jpegData, source, &jpeg.Options{Quality: 90}); err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(&pngData, source); err != nil {
+		t.Fatal(err)
+	}
+	if err := webp.Encode(&webpData, source, webp.Options{Quality: 82, Method: 4}); err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
 		name string
 		data []byte
-		mime string
 	}{
-		{name: "duck.png", data: []byte("\x89PNG\r\n\x1a\nimage"), mime: "image/png"},
-		{name: "duck.jpg", data: []byte("\xff\xd8\xff\xe0image"), mime: "image/jpeg"},
-		{name: "duck.jpeg", data: []byte("\xff\xd8\xff\xe0image"), mime: "image/jpeg"},
-		{name: "duck.webp", data: []byte("RIFF\x04\x00\x00\x00WEBPimage"), mime: "image/webp"},
+		{name: "duck.png", data: pngData.Bytes()},
+		{name: "duck.jpg", data: jpegData.Bytes()},
+		{name: "duck.jpeg", data: jpegData.Bytes()},
+		{name: "duck.webp", data: webpData.Bytes()},
 	}
 
 	for _, tt := range tests {
@@ -35,8 +47,15 @@ func TestReadImageAcceptsPNGJPEGAndWebP(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ReadImage() error = %v", err)
 			}
-			if got.Name != tt.name || got.MIMEType != tt.mime || !bytes.Equal(got.Data, tt.data) {
-				t.Fatalf("ReadImage() = {Name:%q MIMEType:%q Data:%v}, want name %q, MIME %q, unchanged bytes", got.Name, got.MIMEType, got.Data, tt.name, tt.mime)
+			if got.Name != tt.name || got.MIMEType != "image/webp" {
+				t.Fatalf("ReadImage() = {Name:%q MIMEType:%q}, want name %q and normalized MIME image/webp", got.Name, got.MIMEType, tt.name)
+			}
+			decoded, format, err := image.Decode(bytes.NewReader(got.Data))
+			if err != nil {
+				t.Fatalf("decode normalized image: %v", err)
+			}
+			if format != "webp" || decoded.Bounds().Dx() != 96 || decoded.Bounds().Dy() != 64 {
+				t.Fatalf("normalized image = %s %v, want webp 96x64", format, decoded.Bounds())
 			}
 		})
 	}
@@ -84,7 +103,7 @@ func TestReadImageRejectsDirectoryAndUnreadablePath(t *testing.T) {
 	}
 }
 
-func TestReadImageReencodesJPEGOnlyWhenSmallerAndLeavesSourceUntouched(t *testing.T) {
+func TestReadImageNormalizesJPEGToWebPAndLeavesSourceUntouched(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "photo.jpg")
 	var original bytes.Buffer
 	if err := jpeg.Encode(&original, testImage(480, 320), &jpeg.Options{Quality: 100}); err != nil {
@@ -99,11 +118,11 @@ func TestReadImageReencodesJPEGOnlyWhenSmallerAndLeavesSourceUntouched(t *testin
 	if err != nil {
 		t.Fatalf("ReadImage() error = %v", err)
 	}
-	if len(attachment.Data) >= len(originalBytes) {
-		t.Fatalf("JPEG attachment size = %d, want smaller than original %d", len(attachment.Data), len(originalBytes))
+	if attachment.MIMEType != "image/webp" {
+		t.Fatalf("JPEG MIME type = %q, want image/webp", attachment.MIMEType)
 	}
-	if attachment.MIMEType != "image/jpeg" {
-		t.Fatalf("JPEG MIME type = %q, want image/jpeg", attachment.MIMEType)
+	if len(attachment.Data) < 12 || string(attachment.Data[:4]) != "RIFF" || string(attachment.Data[8:12]) != "WEBP" {
+		t.Fatal("JPEG attachment was not encoded as WebP")
 	}
 	unchanged, err := os.ReadFile(path)
 	if err != nil {
@@ -129,9 +148,12 @@ func TestReadImageResizesOversizedJPEGForDuckAI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadImage() error = %v", err)
 	}
-	decoded, err := jpeg.DecodeConfig(bytes.NewReader(attachment.Data))
+	decoded, format, err := image.DecodeConfig(bytes.NewReader(attachment.Data))
 	if err != nil {
-		t.Fatalf("compressed JPEG did not decode: %v", err)
+		t.Fatalf("compressed WebP did not decode: %v", err)
+	}
+	if format != "webp" {
+		t.Fatalf("resized format = %q, want webp", format)
 	}
 	if decoded.Width > maxDuckAIImageDimension || decoded.Height > maxDuckAIImageDimension {
 		t.Fatalf("prepared image dimensions = %dx%d, want each side <= %d", decoded.Width, decoded.Height, maxDuckAIImageDimension)
@@ -168,9 +190,12 @@ func TestReadImageResizePreservesTranslucentPixelColors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadImage() error = %v", err)
 	}
-	decoded, err := png.Decode(bytes.NewReader(attachment.Data))
+	decoded, format, err := image.Decode(bytes.NewReader(attachment.Data))
 	if err != nil {
-		t.Fatalf("prepared PNG did not decode: %v", err)
+		t.Fatalf("prepared image did not decode: %v", err)
+	}
+	if format != "webp" {
+		t.Fatalf("prepared image format = %q, want webp", format)
 	}
 	config, _, err := image.DecodeConfig(bytes.NewReader(attachment.Data))
 	if err != nil {
@@ -200,13 +225,13 @@ func TestReadImageResizePreservesTranslucentPixelColors(t *testing.T) {
 	}
 }
 
-func TestReadImagePreservesJPEGWithEXIFMetadata(t *testing.T) {
+func TestReadImageNormalizesJPEGWithEXIFMetadataToWebP(t *testing.T) {
 	var encoded bytes.Buffer
 	if err := jpeg.Encode(&encoded, testImage(128, 96), &jpeg.Options{Quality: 100}); err != nil {
 		t.Fatal(err)
 	}
 
-	// JPEG APP1 segment with the EXIF identifier. Re-encoding would discard it.
+	// JPEG APP1 segment with the EXIF identifier.
 	original := append([]byte(nil), encoded.Bytes()[:2]...)
 	original = append(original, []byte{0xff, 0xe1, 0x00, 0x08, 'E', 'x', 'i', 'f', 0x00, 0x00}...)
 	original = append(original, encoded.Bytes()[2:]...)
@@ -219,12 +244,39 @@ func TestReadImagePreservesJPEGWithEXIFMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadImage() error = %v", err)
 	}
-	if !bytes.Equal(attachment.Data, original) {
-		t.Fatal("ReadImage() re-encoded JPEG and dropped EXIF metadata")
+	if attachment.MIMEType != "image/webp" {
+		t.Fatalf("normalized MIME type = %q, want image/webp", attachment.MIMEType)
+	}
+	if _, format, err := image.Decode(bytes.NewReader(attachment.Data)); err != nil || format != "webp" {
+		t.Fatalf("normalized image format = %q, err=%v; want webp", format, err)
 	}
 }
 
-func TestReadImagePreservesEXIFWhenResizingOversizedJPEG(t *testing.T) {
+func TestReadImageAppliesJPEGEXIFOrientationBeforeWebPEncoding(t *testing.T) {
+	var encoded bytes.Buffer
+	if err := jpeg.Encode(&encoded, testImage(32, 64), &jpeg.Options{Quality: 95}); err != nil {
+		t.Fatal(err)
+	}
+	data := jpegWithOrientation(encoded.Bytes(), 6)
+	path := filepath.Join(t.TempDir(), "portrait.jpg")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	attachment, err := ReadImage(path)
+	if err != nil {
+		t.Fatalf("ReadImage() error = %v", err)
+	}
+	decoded, format, err := image.DecodeConfig(bytes.NewReader(attachment.Data))
+	if err != nil {
+		t.Fatalf("decode normalized image: %v", err)
+	}
+	if format != "webp" || decoded.Width != 64 || decoded.Height != 32 {
+		t.Fatalf("normalized image = %s %dx%d, want webp 64x32 after EXIF orientation", format, decoded.Width, decoded.Height)
+	}
+}
+
+func TestReadImageNormalizesOversizedJPEGWithEXIFToWebP(t *testing.T) {
 	var encoded bytes.Buffer
 	if err := jpeg.Encode(&encoded, testImage(1254, 900), &jpeg.Options{Quality: 95}); err != nil {
 		t.Fatal(err)
@@ -241,19 +293,22 @@ func TestReadImagePreservesEXIFWhenResizingOversizedJPEG(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadImage() error = %v", err)
 	}
-	if !hasJPEGEXIF(attachment.Data) {
-		t.Fatal("resized JPEG lost its EXIF metadata")
+	if attachment.MIMEType != "image/webp" {
+		t.Fatalf("normalized MIME type = %q, want image/webp", attachment.MIMEType)
 	}
-	decoded, err := jpeg.DecodeConfig(bytes.NewReader(attachment.Data))
+	decoded, format, err := image.DecodeConfig(bytes.NewReader(attachment.Data))
 	if err != nil {
-		t.Fatalf("resized JPEG did not decode: %v", err)
+		t.Fatalf("resized WebP did not decode: %v", err)
+	}
+	if format != "webp" {
+		t.Fatalf("resized image format = %q, want webp", format)
 	}
 	if decoded.Width > maxDuckAIImageDimension || decoded.Height > maxDuckAIImageDimension {
 		t.Fatalf("resized image dimensions = %dx%d, want each side <= %d", decoded.Width, decoded.Height, maxDuckAIImageDimension)
 	}
 }
 
-func TestReadImageReencodesPNGLosslesslyWhenSmaller(t *testing.T) {
+func TestReadImageNormalizesPNGToWebP(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "photo.png")
 	source := testPatternImage(512, 384)
 	var original bytes.Buffer
@@ -268,15 +323,15 @@ func TestReadImageReencodesPNGLosslesslyWhenSmaller(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadImage() error = %v", err)
 	}
-	if len(attachment.Data) >= original.Len() {
-		t.Fatalf("PNG attachment size = %d, want smaller than original %d", len(attachment.Data), original.Len())
+	if attachment.MIMEType != "image/webp" {
+		t.Fatalf("PNG MIME type = %q, want image/webp", attachment.MIMEType)
 	}
-	decoded, err := png.Decode(bytes.NewReader(attachment.Data))
+	decoded, format, err := image.Decode(bytes.NewReader(attachment.Data))
 	if err != nil {
-		t.Fatalf("compressed PNG did not decode: %v", err)
+		t.Fatalf("normalized WebP did not decode: %v", err)
 	}
-	if !imagesEqual(source, decoded) {
-		t.Fatal("PNG re-encoding changed pixel values")
+	if format != "webp" || decoded.Bounds() != source.Bounds() {
+		t.Fatalf("normalized PNG output = %s %v, want webp %v", format, decoded.Bounds(), source.Bounds())
 	}
 }
 
@@ -302,18 +357,19 @@ func testPatternImage(width, height int) *image.RGBA {
 	return result
 }
 
-func imagesEqual(left, right image.Image) bool {
-	if left.Bounds() != right.Bounds() {
-		return false
+func jpegWithOrientation(data []byte, orientation uint16) []byte {
+	exif := []byte{
+		'E', 'x', 'i', 'f', 0, 0,
+		'I', 'I', 42, 0, 8, 0, 0, 0,
+		1, 0,
+		0x12, 0x01, 3, 0, 1, 0, 0, 0,
+		byte(orientation), byte(orientation >> 8), 0, 0,
+		0, 0, 0, 0,
 	}
-	for y := left.Bounds().Min.Y; y < left.Bounds().Max.Y; y++ {
-		for x := left.Bounds().Min.X; x < left.Bounds().Max.X; x++ {
-			lr, lg, lb, la := left.At(x, y).RGBA()
-			rr, rg, rb, ra := right.At(x, y).RGBA()
-			if lr != rr || lg != rg || lb != rb || la != ra {
-				return false
-			}
-		}
-	}
-	return true
+	segmentLength := len(exif) + 2
+	segment := []byte{0xff, 0xe1, byte(segmentLength >> 8), byte(segmentLength)}
+	segment = append(segment, exif...)
+	result := append([]byte(nil), data[:2]...)
+	result = append(result, segment...)
+	return append(result, data[2:]...)
 }

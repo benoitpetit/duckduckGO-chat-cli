@@ -2,16 +2,19 @@ package media
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"image"
 	"image/color"
-	"image/jpeg"
-	"image/png"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"math"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/gen2brain/webp"
 
 	_ "golang.org/x/image/webp"
 )
@@ -20,7 +23,8 @@ const (
 	maxImageSize            = 10 << 20
 	maxDecodedImagePixels   = 40_000_000
 	maxDuckAIImageDimension = 512
-	compressedJPEGQuality   = 82
+	compressedWebPQuality   = 82
+	webPEncodingMethod      = 4
 )
 
 // ImageAttachment stores a local image for a chat message or session archive.
@@ -31,8 +35,9 @@ type ImageAttachment struct {
 	ModerationToken string `json:"-"`
 }
 
-// ReadImage reads a supported image, scales it to Duck.ai's current 512-pixel
-// maximum dimension, and compresses it when safe. The source file is unchanged.
+// ReadImage reads a supported image, normalizes it to the WebP format used by
+// Duck.ai's browser client, and scales it to a 512-pixel maximum dimension.
+// The source file is unchanged.
 func ReadImage(path string) (ImageAttachment, error) {
 	extension := strings.ToLower(filepath.Ext(path))
 	mimeType, ok := supportedImageTypes[extension]
@@ -69,68 +74,57 @@ func ReadImage(path string) (ImageAttachment, error) {
 	if !matchesImageSignature(mimeType, data) {
 		return ImageAttachment{}, fmt.Errorf("%s file extension does not match its image data", path)
 	}
-	data, mimeType = compressImageData(mimeType, data)
+	data, mimeType, err = compressImageData(mimeType, data)
+	if err != nil {
+		return ImageAttachment{}, fmt.Errorf("could not prepare %s for Duck.ai: %w", path, err)
+	}
 
 	return ImageAttachment{Name: filepath.Base(path), MIMEType: mimeType, Data: data}, nil
 }
 
-func compressImageData(mimeType string, data []byte) ([]byte, string) {
+func compressImageData(mimeType string, data []byte) ([]byte, string, error) {
 	config, _, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil || config.Width < 1 || config.Height < 1 || int64(config.Width) > maxDecodedImagePixels/int64(config.Height) {
-		return data, mimeType
+	if err != nil {
+		return nil, "", fmt.Errorf("decode image header: %w", err)
+	}
+	if config.Width < 1 || config.Height < 1 {
+		return nil, "", fmt.Errorf("image has invalid dimensions %dx%d", config.Width, config.Height)
+	}
+	if int64(config.Width) > maxDecodedImagePixels/int64(config.Height) {
+		return nil, "", fmt.Errorf("image exceeds the %d megapixel processing limit", maxDecodedImagePixels/1_000_000)
 	}
 	needsResize := config.Width > maxDuckAIImageDimension || config.Height > maxDuckAIImageDimension
-	if !needsResize && (mimeType == "image/webp" || (mimeType == "image/jpeg" && hasJPEGEXIF(data))) {
-		return data, mimeType
+	if !needsResize && mimeType == "image/webp" {
+		return data, mimeType, nil
 	}
-	decoded, format, err := image.Decode(bytes.NewReader(data))
+	var decoded image.Image
+	if mimeType == "image/webp" {
+		decoded, err = webp.Decode(bytes.NewReader(data), webp.Options{AutoRotate: true})
+	} else {
+		decoded, _, err = image.Decode(bytes.NewReader(data))
+	}
 	if err != nil {
-		return data, mimeType
+		return nil, "", fmt.Errorf("decode image: %w", err)
 	}
-	outputMIMEType := mimeType
+	if mimeType == "image/jpeg" {
+		decoded = orientJPEGImage(decoded, jpegOrientation(data))
+	}
 	if needsResize {
 		decoded = resizeToMaxDimension(decoded, maxDuckAIImageDimension)
-		if format == "webp" {
-			if imageHasTransparency(decoded) {
-				outputMIMEType = "image/png"
-			} else {
-				outputMIMEType = "image/jpeg"
-			}
-		}
 	}
 
 	var encoded bytes.Buffer
-	switch {
-	case outputMIMEType == "image/jpeg" && (format == "jpeg" || format == "webp"):
-		err = jpeg.Encode(&encoded, decoded, &jpeg.Options{Quality: compressedJPEGQuality})
-	case outputMIMEType == "image/png" && (format == "png" || format == "webp"):
-		err = (&png.Encoder{CompressionLevel: png.BestCompression}).Encode(&encoded, decoded)
-	default:
-		return data, mimeType
+	if err := webp.Encode(&encoded, decoded, webp.Options{
+		Quality: compressedWebPQuality,
+		Method:  webPEncodingMethod,
+		Exact:   true,
+	}); err != nil {
+		return nil, "", fmt.Errorf("encode WebP image: %w", err)
 	}
-	if err != nil || encoded.Len() >= len(data) {
-		if err != nil || !needsResize {
-			return data, mimeType
-		}
+	if encoded.Len() == 0 || encoded.Len() > maxImageSize {
+		return nil, "", fmt.Errorf("prepared WebP image exceeds the 10 MiB limit")
 	}
-	result := encoded.Bytes()
-	if format == "jpeg" && hasJPEGEXIF(data) {
-		result = preserveJPEGEXIF(data, result)
-	}
-	return result, outputMIMEType
-}
-
-func imageHasTransparency(img image.Image) bool {
-	bounds := img.Bounds()
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			_, _, _, alpha := img.At(x, y).RGBA()
-			if alpha < 0xffff {
-				return true
-			}
-		}
-	}
-	return false
+	return encoded.Bytes(), "image/webp", nil
 }
 
 func resizeToMaxDimension(src image.Image, maxDimension int) image.Image {
@@ -208,18 +202,6 @@ func bilinearChannel(c00, c10, c01, c11 uint16, fx, fy float64) uint16 {
 	return uint16(math.Round(top*(1-fy) + bottom*fy))
 }
 
-func preserveJPEGEXIF(original, resized []byte) []byte {
-	segment := jpegEXIFSegment(original)
-	if len(segment) == 0 || len(resized) < 2 || resized[0] != 0xff || resized[1] != 0xd8 {
-		return resized
-	}
-	result := make([]byte, 0, len(resized)+len(segment))
-	result = append(result, resized[:2]...)
-	result = append(result, segment...)
-	result = append(result, resized[2:]...)
-	return result
-}
-
 func jpegEXIFSegment(data []byte) []byte {
 	if len(data) < 4 || data[0] != 0xff || data[1] != 0xd8 {
 		return nil
@@ -259,44 +241,86 @@ func jpegEXIFSegment(data []byte) []byte {
 	return nil
 }
 
-// JPEG re-encoding drops EXIF orientation metadata. Preserve those source
-// images unchanged so portrait photos keep the orientation chosen by camera.
-func hasJPEGEXIF(data []byte) bool {
-	if len(data) < 4 || data[0] != 0xff || data[1] != 0xd8 {
-		return false
+func jpegOrientation(data []byte) int {
+	segment := jpegEXIFSegment(data)
+	// APP1 marker, segment length, then the six-byte EXIF identifier.
+	if len(segment) < 18 {
+		return 1
 	}
-	for offset := 2; offset+1 < len(data); {
-		if data[offset] != 0xff {
-			return false
+	tiff := segment[10:]
+	var readUint16 func([]byte) uint16
+	var readUint32 func([]byte) uint32
+	switch string(tiff[:2]) {
+	case "II":
+		readUint16 = binary.LittleEndian.Uint16
+		readUint32 = binary.LittleEndian.Uint32
+	case "MM":
+		readUint16 = binary.BigEndian.Uint16
+		readUint32 = binary.BigEndian.Uint32
+	default:
+		return 1
+	}
+	if len(tiff) < 8 || readUint16(tiff[2:4]) != 42 {
+		return 1
+	}
+	ifdOffset := uint64(readUint32(tiff[4:8]))
+	if ifdOffset+2 > uint64(len(tiff)) {
+		return 1
+	}
+	ifd := tiff[ifdOffset:]
+	entries := int(readUint16(ifd[:2]))
+	for index := 0; index < entries; index++ {
+		entryOffset := 2 + index*12
+		if entryOffset+12 > len(ifd) {
+			return 1
 		}
-		for offset < len(data) && data[offset] == 0xff {
-			offset++
-		}
-		if offset >= len(data) {
-			return false
-		}
-		marker := data[offset]
-		offset++
-		if marker == 0xda || marker == 0xd9 {
-			return false
-		}
-		if marker == 0x01 || (marker >= 0xd0 && marker <= 0xd7) {
+		entry := ifd[entryOffset : entryOffset+12]
+		if readUint16(entry[:2]) != 0x0112 || readUint16(entry[2:4]) != 3 || readUint32(entry[4:8]) != 1 {
 			continue
 		}
-		if offset+2 > len(data) {
-			return false
+		orientation := int(readUint16(entry[8:10]))
+		if orientation >= 1 && orientation <= 8 {
+			return orientation
 		}
-		segmentLength := int(data[offset])<<8 | int(data[offset+1])
-		if segmentLength < 2 || offset+segmentLength > len(data) {
-			return false
-		}
-		payload := data[offset+2 : offset+segmentLength]
-		if marker == 0xe1 && bytes.HasPrefix(payload, []byte("Exif\x00\x00")) {
-			return true
-		}
-		offset += segmentLength
+		return 1
 	}
-	return false
+	return 1
+}
+
+func orientJPEGImage(src image.Image, orientation int) image.Image {
+	if orientation <= 1 || orientation > 8 {
+		return src
+	}
+	bounds := src.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	dstWidth, dstHeight := width, height
+	if orientation >= 5 {
+		dstWidth, dstHeight = height, width
+	}
+	dst := image.NewNRGBA(image.Rect(0, 0, dstWidth, dstHeight))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			dx, dy := x, y
+			switch orientation {
+			case 2:
+				dx = width - 1 - x
+			case 3:
+				dx, dy = width-1-x, height-1-y
+			case 4:
+				dy = height - 1 - y
+			case 5:
+				dx, dy = y, x
+			case 6:
+				dx, dy = height-1-y, x
+			case 7:
+				dx, dy = height-1-y, width-1-x
+			case 8:
+				dx, dy = y, width-1-x
+			}
+			dst.Set(dx, dy, src.At(bounds.Min.X+x, bounds.Min.Y+y))
+		}
+	}
+	return dst
 }
 
 var supportedImageTypes = map[string]string{

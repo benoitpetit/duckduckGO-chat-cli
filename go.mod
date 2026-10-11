@@ -16,6 +16,7 @@ require (
 	github.com/chromedp/cdproto v0.0.0-20250724212937-08a3db8b4327
 	github.com/chromedp/chromedp v0.14.0
 	github.com/fatih/color v1.18.0
+	github.com/gen2brain/webp v0.6.4
 	github.com/gin-gonic/gin v1.10.1
 	github.com/gogpu/systray v0.3.0
 	github.com/jezek/xgb v1.3.1
@@ -32,6 +33,7 @@ require (
 	github.com/clipperhouse/displaywidth v0.7.0 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.4.0 // indirect
+	github.com/ebitengine/purego v0.10.1 // indirect
 	github.com/go-webgpu/goffi v0.6.3 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
