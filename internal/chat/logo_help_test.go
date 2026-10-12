@@ -2,6 +2,7 @@ package chat
 
 import (
 	"bytes"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/fatih/color"
 
 	"duckduckgo-chat-cli/internal/ptytest"
+	"duckduckgo-chat-cli/internal/ui"
 )
 
 // sgrSequence matches the colour escapes fatih/color wraps around help text.
@@ -76,7 +78,7 @@ func TestPrintWelcomeMessageDrawsResponsiveHelpPanel(t *testing.T) {
 
 	titleRow := -1
 	for i, line := range lines {
-		if strings.Contains(line, "DuckDuckGo AI Chat CLI - Help") {
+		if strings.Contains(line, "DuckDuckGo CLI Help") {
 			titleRow = i
 			break
 		}
@@ -85,14 +87,14 @@ func TestPrintWelcomeMessageDrawsResponsiveHelpPanel(t *testing.T) {
 		t.Fatal("expected the help title to be printed")
 	}
 
-	if !strings.HasPrefix(lines[titleRow], "╭─ DuckDuckGo AI Chat CLI - Help") {
+	if !strings.HasPrefix(lines[titleRow], "╭─ DuckDuckGo CLI Help") {
 		t.Errorf("expected the title in the help panel border, got %q", lines[titleRow])
 	}
 
 	// Help content should be inside the same panel and remain within the terminal.
 	commandsRow := -1
 	for i, line := range lines {
-		if strings.Contains(line, "Core Commands:") {
+		if strings.Contains(line, "Chat & Session:") {
 			commandsRow = i
 			break
 		}
@@ -100,12 +102,125 @@ func TestPrintWelcomeMessageDrawsResponsiveHelpPanel(t *testing.T) {
 	if commandsRow < 0 {
 		t.Fatal("expected the command tables to be printed")
 	}
-	if !strings.Contains(lines[commandsRow], "│ Core Commands:") {
-		t.Errorf("Core Commands should be inside the panel, got %q", lines[commandsRow])
+	if !strings.Contains(lines[commandsRow], "│ Chat & Session:") {
+		t.Errorf("Chat & Session should be inside the panel, got %q", lines[commandsRow])
 	}
 	for i, line := range lines {
 		if width := utf8.RuneCountInString(line); width > 110 {
 			t.Errorf("line %d is %d cells wide, terminal is 110: %q", i, width, line)
+		}
+	}
+
+	sectionRows := []string{"Chat & Session:", "Context & Prompts:", "Create & Share:", "Settings & Status:", "API Documentation:"}
+	lastRow := -1
+	for _, section := range sectionRows {
+		row := -1
+		for i, line := range lines {
+			if strings.Contains(line, section) {
+				row = i
+				break
+			}
+		}
+		if row <= lastRow {
+			t.Errorf("help section %q is missing or out of order (row %d after %d)", section, row, lastRow)
+		}
+		lastRow = row
+	}
+
+	commandRow := func(command, section string) int {
+		sectionRow := -1
+		for i, line := range lines {
+			if strings.Contains(line, section) {
+				sectionRow = i
+				break
+			}
+		}
+		for i := sectionRow + 1; i < len(lines); i++ {
+			if strings.Contains(lines[i], ":") && !strings.Contains(lines[i], command) {
+				break
+			}
+			if strings.Contains(lines[i], command) {
+				return i
+			}
+		}
+		return -1
+	}
+	for command, section := range map[string]string{
+		"/file <path>":  "Context & Prompts:",
+		"/image [idea]": "Create & Share:",
+		"/config":       "Settings & Status:",
+	} {
+		if row := commandRow(command, section); row < 0 {
+			t.Errorf("command %q is not listed under %q", command, section)
+		}
+	}
+
+	for _, line := range lines {
+		if strings.Contains(line, "/dashboard <on|off|open|status>") && !strings.Contains(line, "Open, start, stop, or check the local usage dashboard") {
+			t.Errorf("wide help panel did not use the available description width: %q", line)
+		}
+	}
+}
+
+func TestRecordedHelpPanelReflowsAfterTerminalResize(t *testing.T) {
+	master, slave, err := ptytest.Open()
+	if err != nil {
+		t.Skipf("cannot allocate a pseudo-terminal: %v", err)
+	}
+	defer master.Close()
+	if err := ptytest.SetSize(slave, 110, 40); err != nil {
+		t.Fatalf("set initial pty size: %v", err)
+	}
+
+	previousOutput, previousNoColor := color.Output, color.NoColor
+	previousStdout := os.Stdout
+	defer func() {
+		color.Output, color.NoColor, os.Stdout = previousOutput, previousNoColor, previousStdout
+	}()
+	color.Output = slave
+	color.NoColor = false
+	t.Setenv("TERM", "xterm-256color")
+
+	view := NewConversationView("", "", false)
+	ui.SetPanelRecorder(view.RecordPanel)
+	defer ui.SetPanelRecorder(nil)
+	if _, err := ptytest.Capture(master, slave, func() error {
+		PrintWelcomeMessage()
+		return nil
+	}); err != nil {
+		t.Fatalf("capturing initial help panel failed: %v", err)
+	}
+	if len(view.entries) != 1 || view.entries[0].panelTitle == "" {
+		t.Fatalf("help panel was not retained for resize redraw: %+v", view.entries)
+	}
+
+	resizedMaster, resizedSlave, err := ptytest.Open()
+	if err != nil {
+		t.Skipf("cannot allocate a pseudo-terminal for resized output: %v", err)
+	}
+	defer resizedMaster.Close()
+	if err := ptytest.SetSize(resizedSlave, 34, 40); err != nil {
+		t.Fatalf("set resized pty size: %v", err)
+	}
+	color.Output, os.Stdout = resizedSlave, resizedSlave
+	got, err := ptytest.Capture(resizedMaster, resizedSlave, func() error {
+		view.Redraw(34)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("capturing resized help panel failed: %v", err)
+	}
+
+	plain := strings.ReplaceAll(sgrSequence.ReplaceAllString(got, ""), "\r\n", "\n")
+	plain = strings.ReplaceAll(strings.ReplaceAll(plain, "\x1b[2J", ""), "\x1b[H", "")
+	for i, line := range strings.Split(plain, "\n") {
+		if width := utf8.RuneCountInString(line); width > 34 {
+			t.Errorf("resized line %d is %d cells wide, want at most 34: %q", i, width, line)
+		}
+	}
+	for _, want := range []string{"DuckDuckGo CLI Help", "Chat & Session:", "Context & Prompts:", "Create & Share:", "Settings & Status:", "/dashboard"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("resized help panel is missing %q in %q", want, plain)
 		}
 	}
 }
@@ -133,11 +248,11 @@ func TestPrintWelcomeMessageFramesHelpOnTerminal(t *testing.T) {
 		t.Fatalf("capturing /help output failed: %v", err)
 	}
 
-	if !strings.Contains(got, "DuckDuckGo AI Chat CLI - Help") {
+	if !strings.Contains(got, "DuckDuckGo CLI Help") {
 		t.Error("expected /help to still print its title")
 	}
 	plain := strings.ReplaceAll(sgrSequence.ReplaceAllString(got, ""), "\r\n", "\n")
-	if !strings.Contains(plain, "╭─ DuckDuckGo AI Chat CLI - Help") {
+	if !strings.Contains(plain, "╭─ DuckDuckGo CLI Help") {
 		t.Error("expected /help title to be framed on a terminal")
 	}
 }
@@ -160,7 +275,7 @@ func TestPrintWelcomeMessageStaysPlainWhenRedirected(t *testing.T) {
 	if strings.Contains(got, "\x1b[38;2;") {
 		t.Error("redirected /help output must not contain truecolor sequences")
 	}
-	if !strings.Contains(got, "DuckDuckGo AI Chat CLI - Help") {
+	if !strings.Contains(got, "DuckDuckGo CLI Help") {
 		t.Error("expected /help to still print its title")
 	}
 }
@@ -197,7 +312,7 @@ func TestPrintWelcomeMessageStacksOnANarrowTerminal(t *testing.T) {
 	}
 
 	plain := strings.ReplaceAll(sgrSequence.ReplaceAllString(got, ""), "\r\n", "\n")
-	for _, want := range []string{"DuckDuckGo AI Chat CLI", "Core Commands:", "/clear", "Context Commands:", "Productivity Commands:", "API Documentation:"} {
+	for _, want := range []string{"DuckDuckGo CLI Help", "Chat & Session:", "/clear", "Context & Prompts:", "Create & Share:", "Settings & Status:", "API Documentation:"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("stacked help is missing %q", want)
 		}

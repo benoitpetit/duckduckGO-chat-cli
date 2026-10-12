@@ -100,6 +100,12 @@ func panelWidth() int {
 	return width
 }
 
+// PanelContentWidth returns the number of columns available inside a panel at
+// the current terminal width, excluding its borders and padding.
+func PanelContentWidth() int {
+	return max(1, panelWidth()-4)
+}
+
 // PrintStyledPanelAtWidth draws a panel at a specified width without
 // recording it. Conversation redraws use it to reflow retained panels.
 func PrintStyledPanelAtWidth(title string, lines []PanelLine, width int) {

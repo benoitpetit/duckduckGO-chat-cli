@@ -1844,7 +1844,7 @@ type CommandHelp struct {
 }
 
 func PrintWelcomeMessage() {
-	textWidth := max(20, ui.TextWidth(color.Output)-4)
+	textWidth := ui.PanelContentWidth()
 	lines := make([]ui.PanelLine, 0)
 
 	// Get commands from centralized registry
@@ -1854,9 +1854,10 @@ func PrintWelcomeMessage() {
 		title    string
 		commands []CommandHelp
 	}{
-		{title: "Core Commands:", commands: helpRows(commandsByCategory["core"])},
-		{title: "Context Commands:", commands: helpRows(commandsByCategory["context"])},
-		{title: "Productivity Commands:", commands: helpRows(commandsByCategory["productivity"])},
+		{title: "Chat & Session:", commands: helpRows(commandsByCategory["core"])},
+		{title: "Context & Prompts:", commands: helpRows(commandsByCategory["context"])},
+		{title: "Create & Share:", commands: helpRows(commandsByCategory["productivity"])},
+		{title: "Settings & Status:", commands: helpRows(commandsByCategory["settings"])},
 		{
 			title: "API Documentation:",
 			commands: []CommandHelp{
@@ -1880,7 +1881,7 @@ func PrintWelcomeMessage() {
 		lines = append(lines, ui.PanelLine{{Text: line, Style: ui.PanelWarning}})
 	}
 
-	ui.PrintStyledPanel("DuckDuckGo AI Chat CLI - Help", lines)
+	ui.PrintStyledPanel("DuckDuckGo CLI Help", lines)
 }
 
 // helpRows copies a command category into table rows, falling back to the
