@@ -435,8 +435,11 @@ func (s *relaySession) handleFinish(w http.ResponseWriter, r *http.Request) {
 	}
 	s.closed = true
 	s.mu.Unlock()
-	_ = s.pipeWriter.Close()
 	w.WriteHeader(http.StatusNoContent)
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	_ = s.pipeWriter.Close()
 }
 
 func (s *relaySession) handleFailure(w http.ResponseWriter, r *http.Request) {
