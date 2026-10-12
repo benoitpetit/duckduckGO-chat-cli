@@ -1350,6 +1350,9 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, cmd *command.Comm
 		ui.AIln("DuckDuckGo AI Chat CLI version %s", Version)
 		ui.Mutedln("Go version: %s", runtime.Version())
 		ui.Mutedln("OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
+		if _, err := update.CheckForUpdates(Version); err != nil {
+			ui.Warningln("Could not check for updates: %v", err)
+		}
 	case cmd.Type == "/speak":
 		runSpeakCommand()
 	case cmd.Type == "/stats":
