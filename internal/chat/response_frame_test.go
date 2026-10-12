@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -8,6 +9,8 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/fatih/color"
+
+	"duckduckgo-chat-cli/internal/ui"
 )
 
 func TestNormalizeFrameLineExpandsTabsAndKeepsStyles(t *testing.T) {
@@ -51,6 +54,31 @@ func TestResponseFrameKeepsAllBordersAligned(t *testing.T) {
 		if got := ansi.StringWidth(line); got != wantWidth {
 			t.Errorf("line %d width = %d, want %d: %q", i+1, got, wantWidth, line)
 		}
+	}
+}
+
+func TestResponseFrameMatchesStyledPanelWidthAndAlignment(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	for _, terminalWidth := range []int{80, 140} {
+		t.Run(fmt.Sprintf("terminal-%d", terminalWidth), func(t *testing.T) {
+			frame := newResponseFrame("Coordinate", terminalWidth)
+			response := captureResponseFrame(t, func() {
+				frame.Write("answer", false)
+				frame.Close()
+			})
+			panel := captureResponseFrame(t, func() {
+				ui.PrintStyledPanelAtWidth("Coordinate results", []ui.PanelLine{{{Text: "details"}}}, terminalWidth)
+			})
+
+			responseTop := strings.Split(strings.TrimSuffix(response, "\n"), "\n")[0]
+			panelTop := strings.Split(strings.TrimSuffix(panel, "\n"), "\n")[0]
+			if got, want := ansi.StringWidth(responseTop), ansi.StringWidth(panelTop); got != want {
+				t.Fatalf("response frame width = %d, panel width = %d at terminal width %d", got, want, terminalWidth)
+			}
+			if strings.HasPrefix(responseTop, " ") != strings.HasPrefix(panelTop, " ") {
+				t.Fatalf("response and panel have different left alignment: response=%q panel=%q", responseTop, panelTop)
+			}
+		})
 	}
 }
 

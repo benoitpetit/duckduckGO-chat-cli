@@ -52,6 +52,8 @@ var cliShutdown func()
 var executorMu sync.Mutex
 var interactiveChild bool
 
+const coordinatePromptColor = "#FF5555"
+
 type trayServiceRuntime struct {
 	mu            sync.Mutex
 	configured    *config.Config
@@ -124,7 +126,8 @@ func (w *themeConsoleWriter) SetColor(fg, bg prompt.Color, bold bool) {
 	// Reset the previous style before applying this prompt segment's colors.
 	w.WriteRawStr("\x1b[0m")
 	theme := ui.CurrentTheme()
-	if foreground := promptColorHex(theme, fg, false); foreground != "" {
+	foreground := promptPrefixForeground(theme, fg, bg, chatSession != nil && chatSession.HasNextCoordinate())
+	if foreground != "" {
 		writePromptRGB(w, foreground, 38)
 	}
 	if background := promptColorHex(theme, bg, true); background != "" {
@@ -133,6 +136,22 @@ func (w *themeConsoleWriter) SetColor(fg, bg prompt.Color, bold bool) {
 	if bold {
 		w.WriteRawStr("\x1b[1m")
 	}
+}
+
+func promptPrefixForeground(theme ui.Theme, fg, bg prompt.Color, coordinatePending bool) string {
+	// go-prompt uses this color pair only for the You: prefix. Highlight it
+	// while a one-shot coordinate plan is waiting for the next question.
+	if coordinatePending && fg == prompt.Blue && bg == prompt.DarkGray {
+		return coordinatePromptColor
+	}
+	return promptColorHex(theme, fg, false)
+}
+
+func coordinatePromptPrefix(coordinatePending bool) (string, bool) {
+	if coordinatePending {
+		return "◆ You: ", true
+	}
+	return "", false
 }
 
 func promptColorHex(theme ui.Theme, color prompt.Color, background bool) string {
@@ -499,6 +518,7 @@ func printCLIUsage(out io.Writer) {
 		command("/file <path>", "Add a local file"),
 		command("/url <url>", "Add a web page"),
 		command("/image [idea]", "Generate an image; omit idea for guided options"),
+		command("/coordinate [cancel]", "Coordinate models for the next question"),
 		command("/speak", "Start a voice chat"),
 		command("/history", "Browse saved conversations"),
 		command("/config", "Change settings"),
@@ -1060,6 +1080,9 @@ func runInteractive() {
 		prompt.OptionShowCompletionAtStart(),
 		prompt.OptionTitle("duckduckgo-chat-cli"),
 		prompt.OptionPrefix("You: "),
+		prompt.OptionLivePrefix(func() (string, bool) {
+			return coordinatePromptPrefix(chatSession != nil && chatSession.HasNextCoordinate())
+		}),
 		prompt.OptionPrefixTextColor(prompt.Blue),
 		prompt.OptionPrefixBackgroundColor(prompt.DarkGray),
 		prompt.OptionInputTextColor(prompt.LightGray),
@@ -1261,6 +1284,10 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, cmd *command.Comm
 	case cmd.Type == "/image":
 		withResizeRedrawSuspended(chatSession, func() {
 			trackActivity("image", "Image generation", func() { chat.HandleImageCommand(chatSession, cmd.Args, cfg) })
+		})
+	case cmd.Type == "/coordinate":
+		withResizeRedrawSuspended(chatSession, func() {
+			chat.HandleCoordinateCommand(chatSession, cfg, cmd.Args)
 		})
 	case cmd.Type == "/issue":
 		withResizeRedrawSuspended(chatSession, chat.HandleIssueCommand)

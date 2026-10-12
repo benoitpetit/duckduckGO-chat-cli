@@ -52,6 +52,12 @@ func GetCommandRegistry() *CommandRegistry {
 				Usage:       "/image [idea]",
 				Category:    "productivity",
 			},
+			"/coordinate": {
+				Name:        "/coordinate",
+				Description: "Coordinate selected Duck.ai models for the next question",
+				Usage:       "/coordinate [cancel]",
+				Category:    "productivity",
+			},
 			"/issue": {
 				Name:        "/issue",
 				Description: "Open a prefilled GitHub issue form",

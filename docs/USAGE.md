@@ -31,6 +31,7 @@ Type `/help` in the CLI for the current command list.
 | --- | --- |
 | `/clear` | Save the current conversation and start a fresh chat session |
 | `/config` | Change the model, appearance, shortcuts, and other settings |
+| `/coordinate [cancel]` | Coordinate selected Duck.ai models for the next question |
 | `/copy` | Copy a response or code block |
 | `/dashboard <on\|off\|open\|status>` | Control or open the local dashboard |
 | `/exit` | Close the interactive CLI |
@@ -65,7 +66,23 @@ Use `--` to separate a context command from the question about that context. Com
 /library load project-notes -- Summarize the open questions.
 ```
 
-`/speak`, `/image`, and `/prompt` also run on their own. They cannot be chained with `&&`.
+`/speak`, `/image`, `/coordinate`, and `/prompt` also run on their own. They cannot be chained with `&&`.
+
+### Coordinate models for one question
+
+Run `/coordinate` to open a framed menu. Choose **Chain**, **Independent**, or **Debate**, then review its two prefilled agents and suggested roles. You can select two or three models and edit each agent's role. The default roles match the selected algorithm; model and role choices are saved separately for each strategy, so switching strategies restores that strategy's preset. Each valid model, role, algorithm, debate-round, or execution change is saved immediately to the local `config.json`, even if you leave the menu before arming a question. Debate uses one round by default and allows at most two. The summary shows planned Duck.ai requests, excluding retries, and the maximum number of simultaneous requests. These are request-count estimates, not price or latency promises. If a saved model is no longer available, replace it before arming the next question. Repeated models or roles are allowed, with an advisory that agents may give similar answers.
+
+After selecting **Use for next question**, type your question normally. A question submitted with `/file`, `/url`, `/search`, `/library`, or a loaded `/prompt` can also use the selection. `/image` uses its separate generation flow and leaves the selection pending. Run `/coordinate cancel` to clear a pending selection.
+
+Every agent sees the current question and conversation context. **Independent** asks the first two agents to answer separately, then asks a synthesis agent to combine their responses. **Chain** asks agent 1 for a draft, agent 2 to critique it, and the final agent to write the response. **Debate** has agents 1 and 2 exchange revisions for the selected one or two rounds, then a synthesis agent writes the response. With two selected models, agent 1 also performs the synthesis; with three, agent 3 does it. The CLI shows the current stages in the spinner and retains a colored progress panel for terminal redraw after resizing.
+
+Requests run one after another by default. In the **Execution** submenu, choose **Parallel independent steps** for Independent or Debate to overlap the first two answers and, in Debate, each pair of revisions. Synthesis still waits for both responses. Chain has dependencies between every stage, so it always stays sequential. Parallel execution is opt-in and is saved with the preset.
+
+Chain and Independent plan three Duck.ai requests. Debate plans five requests with one round or seven with two rounds, whether sequential or parallel. Retries performed by Duck.ai's existing request recovery can add calls. If a stage fails, choose **Resume incomplete stages** to retry failed/cancelled work and continue its dependents while keeping completed outputs. Each Resume action attempts each incomplete stage once; Duck.ai's existing `Retry-After`, clean-session, and browser recovery remains active inside each request. If at least one agent output is complete and another is missing, you can instead choose **Synthesize partial result**. That answer is labeled `Coordinate · partial`, names unavailable stages, and is summarized as using available outputs only. Choose **Stop** to leave the conversation unchanged.
+
+Cancelling with Ctrl+C also stops the run without committing the question or answer. A complete answer, or a partial answer you explicitly selected, is added to the conversation exactly once. Intermediate prompts and agent responses remain in memory for the active run; they are not written to the conversation, local preset, or analytics. After the response, a compact **Coordinate results** panel lists each model and role, its completed/incomplete stages, whether all planned outputs were used, and that synthesis was asked to flag unresolved disagreements. This is a summary of the workflow; it does not independently verify model claims. The CLI then announces that Coordinate mode has ended.
+
+If the question includes an image, every selected model must support image input. If a model is incompatible, the CLI does not send the question and keeps the image and coordinate selection. Reopen `/coordinate` to adjust the models, then submit the question again.
 
 ### Saved prompts
 

@@ -32,6 +32,7 @@
 
 - Stream model replies in the terminal with readable Markdown, code formatting, and configurable response frames.
 - Choose from Duck.ai models and add context from local files, web searches, URLs, or searchable file libraries.
+- Coordinate two or three Duck.ai models with live stage progress, resumable failures, an explicitly partial answer option, and a compact result summary.
 - Generate images with a direct prompt or a guided flow, and start live voice conversations from the CLI.
 - Save, search, and restore conversations; reuse saved prompts and review session statistics.
 - Pick from five color themes, use command suggestions, and keep DuckChat available in the system tray with shortcuts for text and voice chat.
@@ -110,6 +111,7 @@ These slash commands are typed at the `You:` prompt after the interactive chat s
 | `/load [session_id]`  | Restore a saved conversation                              |
 | `/speak`              | Start or restore a voice conversation                     |
 | `/image [idea]`       | Generate an image, with an optional guided prompt flow    |
+| `/coordinate [cancel]` | Combine two or three Duck.ai models for the next question |
 
 #### Add context and manage prompts
 
@@ -134,7 +136,9 @@ These slash commands are typed at the `You:` prompt after the interactive chat s
 | `/version`                           | Show version information                           |
 | `/exit`                              | Close the interactive chat                         |
 
-Use `&&` to combine `/file`, `/url`, and `/search` before a prompt. `/library`, `/prompt`, `/image`, and `/speak` are standalone commands. The [user guide](docs/USAGE.md) has examples and more detail about each command.
+Use `&&` to combine `/file`, `/url`, and `/search` before a prompt. `/library`, `/prompt`, `/image`, `/coordinate`, and `/speak` are standalone commands. The [user guide](docs/USAGE.md) has examples and more detail about each command.
+
+Run `/coordinate` to choose two or three Duck.ai models, edit their roles, and select a chain, independent-answer, or debate flow for your next question. Each strategy starts with two prefilled agents and role suggestions suited to its workflow. Model and role choices are saved separately for Independent, Chain, and Debate, so switching strategies restores that strategy’s preset. The menu shows planned requests (retries excluded) and maximum concurrency. Independent and Debate can run independent steps in parallel. Model, role, and strategy edits are saved locally as you make them. On failure, resume incomplete stages, request a clearly marked partial synthesis when outputs are missing, or stop without changing conversation history. A result panel lists the models, roles, completed stages, and whether synthesis used all planned outputs. Prompts and intermediate outputs stay in memory for the current run. Use `/coordinate cancel` to clear a pending selection. See the [coordinate guide](docs/USAGE.md#coordinate-models-for-one-question) for details.
 
 ### Example
 

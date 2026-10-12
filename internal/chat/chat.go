@@ -75,6 +75,10 @@ type Chat struct {
 	GeneratedImageDir                 string
 	requestMu                         sync.Mutex
 	requestCancel                     context.CancelFunc
+	coordinateMu                      sync.Mutex
+	coordinateNext                    *CoordinatePlan
+	coordinateRunner                  CoordinateRunner
+	coordinateRecoveryPrompt          CoordinateRecoveryPrompt
 	rateLimitFallbackOpen             time.Time
 	rateLimitBrowserOpenedThisAttempt bool
 	retryProofTimeout                 time.Duration
@@ -476,6 +480,9 @@ func clearTerminal() {
 }
 
 func ProcessInput(c *Chat, input string, cfg *config.Config) {
+	if c.processPendingCoordinate(input, cfg) {
+		return
+	}
 	processInputWithRoleLengths(c, input, cfg, len(input), 0)
 }
 
@@ -488,6 +495,9 @@ func ProcessInputWithContext(c *Chat, contextContent, prompt string, cfg *config
 			input += "\n\n"
 		}
 		input += prompt
+	}
+	if c.processPendingCoordinate(input, cfg) {
+		return
 	}
 	processInputWithRoleLengths(c, input, cfg, len(prompt), len(contextContent))
 }

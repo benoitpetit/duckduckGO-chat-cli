@@ -13,11 +13,12 @@ import (
 )
 
 type displayEntry struct {
-	user       bool
-	model      string
-	markdown   string
-	panelTitle string
-	panelLines []ui.PanelLine
+	user           bool
+	model          string
+	markdown       string
+	framedOverride *bool
+	panelTitle     string
+	panelLines     []ui.PanelLine
 }
 
 // ConversationView retains exactly the text needed to lay out the visible
@@ -73,6 +74,16 @@ func (v *ConversationView) RecordAssistant(model, markdown string) {
 	v.mu.Unlock()
 }
 
+// RecordAssistantWithFrame retains a per-answer frame choice for later redraws.
+func (v *ConversationView) RecordAssistantWithFrame(model, markdown string, framed bool) {
+	if v == nil || strings.TrimSpace(markdown) == "" {
+		return
+	}
+	v.mu.Lock()
+	v.entries = append(v.entries, displayEntry{model: model, markdown: markdown, framedOverride: &framed})
+	v.mu.Unlock()
+}
+
 // RecordPanel adds a rendered UI panel to the retained screen history.
 func (v *ConversationView) RecordPanel(title string, lines []ui.PanelLine) {
 	if v == nil {
@@ -85,6 +96,27 @@ func (v *ConversationView) RecordPanel(title string, lines []ui.PanelLine) {
 	v.mu.Lock()
 	v.entries = append(v.entries, displayEntry{panelTitle: title, panelLines: cloned})
 	v.mu.Unlock()
+}
+
+// UpdatePanel replaces the most recently retained panel with the same title,
+// or records it when no matching panel exists yet.
+func (v *ConversationView) UpdatePanel(title string, lines []ui.PanelLine) {
+	if v == nil {
+		return
+	}
+	cloned := make([]ui.PanelLine, len(lines))
+	for i, line := range lines {
+		cloned[i] = append(ui.PanelLine(nil), line...)
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	for i := len(v.entries) - 1; i >= 0; i-- {
+		if v.entries[i].panelTitle == title {
+			v.entries[i].panelLines = cloned
+			return
+		}
+	}
+	v.entries = append(v.entries, displayEntry{panelTitle: title, panelLines: cloned})
 }
 
 // SuspendRedraw prevents a resize callback from clearing an active interactive
@@ -164,7 +196,11 @@ func (v *ConversationView) Redraw(width int) {
 			printDisplayUser(entry.markdown, width)
 			continue
 		}
-		renderMarkdownAtWidth(entry.markdown, entry.model, width, framed)
+		entryFramed := framed
+		if entry.framedOverride != nil {
+			entryFramed = *entry.framedOverride
+		}
+		renderMarkdownAtWidth(entry.markdown, entry.model, width, entryFramed)
 	}
 }
 

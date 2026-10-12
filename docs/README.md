@@ -2,7 +2,7 @@
 
 Start with the guide that matches what you are doing:
 
-- [User guide](USAGE.md): chat commands, settings, voice, dashboard, API, and local data.
+- [User guide](USAGE.md): chat commands (including multi-model coordination), settings, voice, dashboard, API, and local data.
 - [Build and release guide](BUILD.md): development setup, checks, and release builds.
 
 ## API reference

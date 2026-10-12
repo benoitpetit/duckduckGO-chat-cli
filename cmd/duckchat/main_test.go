@@ -41,6 +41,31 @@ func TestPromptCompletionTextHasReadableContrastForEveryTheme(t *testing.T) {
 	}
 }
 
+func TestCoordinatePromptPrefixUsesDistinctRed(t *testing.T) {
+	theme, ok := ui.ResolveTheme("official")
+	if !ok {
+		t.Fatal("official theme is unavailable")
+	}
+	got := promptPrefixForeground(theme, prompt.Blue, prompt.DarkGray, true)
+	if got != "#FF5555" {
+		t.Fatalf("coordinate prefix foreground = %s, want distinct red #FF5555", got)
+	}
+	if got == promptPrefixForeground(theme, prompt.Blue, prompt.DarkGray, false) {
+		t.Fatal("coordinate prefix color should differ from the normal prompt color")
+	}
+}
+
+func TestCoordinatePromptPrefixAddsIndicatorOnlyWhilePending(t *testing.T) {
+	got, live := coordinatePromptPrefix(true)
+	if !live || got != "◆ You: " {
+		t.Fatalf("coordinate prefix = (%q, %v), want active indicator", got, live)
+	}
+	got, live = coordinatePromptPrefix(false)
+	if live || got != "" {
+		t.Fatalf("normal prefix override = (%q, %v), want static You: prefix", got, live)
+	}
+}
+
 func TestPromptScrollbarUsesThemeAccentAndSurface(t *testing.T) {
 	thumb, track := promptScrollbarColors()
 	if thumb != prompt.Blue || track != prompt.DarkGray {

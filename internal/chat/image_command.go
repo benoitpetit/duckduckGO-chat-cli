@@ -239,7 +239,9 @@ func HandleImageCommand(c *Chat, idea string, cfg *config.Config) {
 			if c.Analytics != nil {
 				c.Analytics.RecordImageGenerationRequest()
 			}
-			ProcessInput(c, prompt, cfg)
+			// Image generation is its own command, so it must not consume a
+			// one-shot /coordinate selection prepared for the next question.
+			processInputWithRoleLengths(c, prompt, cfg, len(prompt), 0)
 		})
 	})
 	if errors.Is(err, surveyterminal.InterruptErr) || errors.Is(err, errImagePromptCancelled) {

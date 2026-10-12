@@ -11,7 +11,8 @@ import (
 	"golang.org/x/term"
 )
 
-const panelMaxWidth = 112
+// PanelMaxWidth is the maximum outer width used by framed panels.
+const PanelMaxWidth = 112
 
 var panelRecorder struct {
 	sync.RWMutex
@@ -91,8 +92,8 @@ func panelWidth() int {
 			width = columns
 		}
 	}
-	if width > panelMaxWidth {
-		width = panelMaxWidth
+	if width > PanelMaxWidth {
+		width = PanelMaxWidth
 	}
 	if width < 8 {
 		width = 8
@@ -109,8 +110,8 @@ func PanelContentWidth() int {
 // PrintStyledPanelAtWidth draws a panel at a specified width without
 // recording it. Conversation redraws use it to reflow retained panels.
 func PrintStyledPanelAtWidth(title string, lines []PanelLine, width int) {
-	if width > panelMaxWidth {
-		width = panelMaxWidth
+	if width > PanelMaxWidth {
+		width = PanelMaxWidth
 	}
 	if width < 8 {
 		width = 8

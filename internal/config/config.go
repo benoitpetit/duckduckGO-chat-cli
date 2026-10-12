@@ -154,6 +154,31 @@ type DashboardConfig struct {
 	PasswordHash              string `json:"password_hash,omitempty"`
 }
 
+// CoordinateAgentConfig stores one model and its role in the reusable
+// multi-model coordination preset.
+type CoordinateAgentConfig struct {
+	Model string `json:"model"`
+	Role  string `json:"role"`
+}
+
+// CoordinatePresetConfig stores the agents and execution options for one
+// coordinate strategy.
+type CoordinatePresetConfig struct {
+	Agents       []CoordinateAgentConfig `json:"agents,omitempty"`
+	DebateRounds int                     `json:"debate_rounds,omitempty"`
+	Parallel     bool                    `json:"parallel,omitempty"`
+}
+
+// CoordinateConfig stores reusable, strategy-specific presets. The direct
+// fields retain compatibility with configs written before profiles existed.
+type CoordinateConfig struct {
+	Strategy     string                            `json:"strategy,omitempty"`
+	Agents       []CoordinateAgentConfig           `json:"agents,omitempty"`
+	DebateRounds int                               `json:"debate_rounds,omitempty"`
+	Parallel     bool                              `json:"parallel,omitempty"`
+	Profiles     map[string]CoordinatePresetConfig `json:"profiles,omitempty"`
+}
+
 func defaultDashboardConfig() DashboardConfig {
 	return DashboardConfig{Port: 8765, RefreshIntervalSeconds: 3, RetentionDays: 90, AnalysisTokenBudget: 8000}
 }
@@ -188,6 +213,7 @@ type Config struct {
 	Tray             TrayConfig        `json:"tray"`
 	RateLimit        RateLimitConfig   `json:"rate_limit"`
 	Dashboard        DashboardConfig   `json:"dashboard"`
+	Coordinate       CoordinateConfig  `json:"coordinate,omitempty"`
 	ShowMenu         bool              `json:"show_menu"`
 	GlobalPrompt     string            `json:"global_prompt"`
 	ConfirmLongInput bool              `json:"confirm_long_input"`

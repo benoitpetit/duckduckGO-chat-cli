@@ -15,7 +15,7 @@ import (
 const (
 	responseFrameMinRailWidth = 32
 	responseFrameMinBoxWidth  = 52
-	responseFrameMaxWidth     = 112
+	responseFrameMaxWidth     = ui.PanelMaxWidth
 )
 
 type responseFrameMode uint8
@@ -66,9 +66,8 @@ func newResponseFrame(modelName string, terminalWidth int) *responseFrame {
 	}
 
 	frame.mode = responseFrameBox
-	frame.width = min(terminalWidth-2, responseFrameMaxWidth)
+	frame.width = min(terminalWidth, responseFrameMaxWidth)
 	frame.contentWidth = frame.width - 4
-	frame.indent = " "
 	return frame
 }
 

@@ -111,6 +111,30 @@ func TestDashboardConfigJSONRoundTrip(t *testing.T) {
 	}
 }
 
+func TestCoordinateProfilesSurviveConfigRoundTrip(t *testing.T) {
+	input := `{"coordinate":{"strategy":"chain","profiles":{"independent":{"agents":[{"model":"gpt-6-luna","role":"Analyst"}]},"chain":{"agents":[{"model":"gpt-5.6-luna","role":"Solver"}],"parallel":true},"debate":{"agents":[{"model":"gpt-5.4-mini","role":"Debater"}],"debate_rounds":2}}}}`
+	var cfg Config
+	if err := json.Unmarshal([]byte(input), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var encoded map[string]any
+	if err := json.Unmarshal(data, &encoded); err != nil {
+		t.Fatal(err)
+	}
+	coordinate, ok := encoded["coordinate"].(map[string]any)
+	if !ok {
+		t.Fatalf("coordinate config missing after round trip: %s", data)
+	}
+	profiles, ok := coordinate["profiles"].(map[string]any)
+	if !ok || len(profiles) != 3 {
+		t.Fatalf("coordinate profiles did not survive round trip: %s", data)
+	}
+}
+
 func TestDashboardConfigInvalidValuesUseDefaults(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", root)
