@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"duckduckgo-chat-cli/internal/chatcontext"
 	"duckduckgo-chat-cli/internal/models"
 )
 
@@ -68,6 +69,7 @@ func (c *Chat) formatConversation(metadata ExportMetadata) string {
 		for _, image := range msg.Images {
 			writeSection(&sb, "Image Attachment", timestamp, imageAttachmentMarker(image))
 		}
+		writeSourceReferences(&sb, msg.Sources)
 	}
 
 	return sb.String()
@@ -82,6 +84,7 @@ func (c *Chat) formatLastResponse(metadata ExportMetadata) string {
 	if lastMsg != nil {
 		title := fmt.Sprintf("%s Response", formatModelName(string(c.Model)))
 		writeSection(&sb, title, formatMessageTimestamp(lastMsg.Timestamp), lastMsg.Content)
+		writeSourceReferences(&sb, sourcesForLatestExchange(c))
 	}
 
 	return sb.String()
@@ -115,6 +118,7 @@ func (c *Chat) formatSearchResults(metadata ExportMetadata, query string) string
 		if strings.Contains(msg.Content, "[Search Context]") {
 			writeSection(&sb, "Results", formatMessageTimestamp(msg.Timestamp),
 				strings.TrimPrefix(msg.Content, "[Search Context]\n"))
+			writeSourceReferences(&sb, msg.Sources)
 			break
 		}
 	}
@@ -165,7 +169,61 @@ func exportMessageContent(msg Message) string {
 		content.WriteString("\n\n")
 		content.WriteString(imageAttachmentMarker(image))
 	}
+	if len(msg.Sources) > 0 {
+		var references strings.Builder
+		writeSourceReferences(&references, msg.Sources)
+		content.WriteString("\n\n")
+		content.WriteString(strings.TrimSpace(references.String()))
+	}
 	return content.String()
+}
+
+func writeSourceReferences(sb *strings.Builder, sources []chatcontext.SourceRef) {
+	if len(sources) == 0 {
+		return
+	}
+	sb.WriteString("### Source references\n\n")
+	for _, source := range sources {
+		kind := source.Kind
+		if kind == "" {
+			kind = "unknown"
+		}
+		state := source.State
+		if state == "" {
+			state = chatcontext.SourceStateActive
+		}
+		sb.WriteString(fmt.Sprintf("- %s · %s · %s · %s\n", markdownCodeSpan(source.ID), kind, markdownCodeSpan(displaySourceName(source)), state))
+		if source.URI != "" {
+			sb.WriteString("  - URI: " + markdownCodeSpan(source.URI) + "\n")
+		}
+		if source.SizeBytes > 0 {
+			sb.WriteString(fmt.Sprintf("  - Approximate size: %s\n", approximateSizeLabel(source.SizeBytes)))
+		}
+	}
+	sb.WriteString("\n")
+}
+
+func markdownCodeSpan(value string) string {
+	value = strings.NewReplacer("\r", " ", "\n", " ").Replace(value)
+	longestRun := 0
+	for i := 0; i < len(value); {
+		if value[i] != '`' {
+			i++
+			continue
+		}
+		start := i
+		for i < len(value) && value[i] == '`' {
+			i++
+		}
+		if i-start > longestRun {
+			longestRun = i - start
+		}
+	}
+	delimiter := strings.Repeat("`", longestRun+1)
+	if strings.HasPrefix(value, "`") || strings.HasSuffix(value, "`") || strings.HasPrefix(value, " ") || strings.HasSuffix(value, " ") {
+		value = " " + value + " "
+	}
+	return delimiter + value + delimiter
 }
 
 func writeMetadataHeader(sb *strings.Builder, metadata ExportMetadata) {

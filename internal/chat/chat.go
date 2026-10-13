@@ -623,6 +623,47 @@ func applyOptimizationStates(messages []intelligence.Message, changes []intellig
 	}
 }
 
+func retainOmittedOptimizationSources(messages, before []intelligence.Message, changes []intelligence.OptimizationChange) {
+	if len(messages) == 0 || len(changes) == 0 {
+		return
+	}
+	sources := make(map[string]chatcontext.SourceRef)
+	for _, message := range before {
+		for _, source := range message.Sources {
+			if source.ID != "" {
+				if _, exists := sources[source.ID]; !exists {
+					sources[source.ID] = source
+				}
+			}
+		}
+	}
+	retained := make(map[string]bool)
+	target := -1
+	for messageIndex, message := range messages {
+		if message.Role == "user" && (target < 0 || message.Sequence > messages[target].Sequence) {
+			target = messageIndex
+		}
+		for _, source := range message.Sources {
+			retained[source.ID] = true
+		}
+	}
+	if target < 0 {
+		return
+	}
+	for _, change := range changes {
+		if change.State != chatcontext.SourceStateOmitted || retained[change.SourceID] {
+			continue
+		}
+		source, ok := sources[change.SourceID]
+		if !ok {
+			continue
+		}
+		source.State = change.State
+		messages[target].Sources = append(messages[target].Sources, source)
+		retained[change.SourceID] = true
+	}
+}
+
 func contextOptimizationChanged(before, after []intelligence.Message) bool {
 	if len(before) != len(after) {
 		return true
@@ -801,6 +842,7 @@ func processInputWithStreamFetcherAndTokenRoles(ctx context.Context, c *Chat, in
 		optimizedMessages, bytesSaved, changes := c.ContextOptimizer.OptimizeContextWithReport(requestMessages)
 		c.LastOptimizationChanges = changes
 		applyOptimizationStates(optimizedMessages, changes)
+		retainOmittedOptimizationSources(optimizedMessages, requestMessages, changes)
 		if contextOptimizationChanged(requestMessages, optimizedMessages) {
 			printOptimizationNotice(c, bytesSaved, changes)
 		}
@@ -814,6 +856,22 @@ func processInputWithStreamFetcherAndTokenRoles(ctx context.Context, c *Chat, in
 				}
 			}
 		}
+	}
+
+	sourceRefs := sourcesForLatestExchange(c)
+	if labels := sourcePromptLabels(sourceRefs); labels != "" {
+		actualMessage += "\n\n" + labels
+		for i := len(c.Messages) - 1; i >= 0; i-- {
+			if c.Messages[i].Role == "user" {
+				c.Messages[i].Content += "\n\n" + labels
+				break
+			}
+		}
+	}
+	if c.Display != nil && len(sourceRefs) > 0 {
+		const title = "Sources for this exchange"
+		lines := c.Display.RecordSourceReferences(sourceRefs)
+		ui.PrintStyledPanelAtWidth(title, lines, ui.PanelContentWidth()+4)
 	}
 
 	requestedModel := c.Model

@@ -182,3 +182,25 @@ func sourceStatePriority(state chatcontext.SourceState) int {
 		return 0
 	}
 }
+
+func sourcePromptLabels(sources []chatcontext.SourceRef) string {
+	lines := []string{}
+	for _, source := range sources {
+		if source.ID == "" || source.State == chatcontext.SourceStateOmitted {
+			continue
+		}
+		kind := source.Kind
+		if kind == "" {
+			kind = "unknown"
+		}
+		state := source.State
+		if state == "" {
+			state = chatcontext.SourceStateActive
+		}
+		lines = append(lines, fmt.Sprintf("[%d] %s · %s · %s · %s", len(lines)+1, source.ID, kind, displaySourceName(source), state))
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return "[Source references]\nLabels identify supplied context; they are not verified citations.\n" + strings.Join(lines, "\n")
+}

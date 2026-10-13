@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"duckduckgo-chat-cli/internal/chatcontext"
 	"duckduckgo-chat-cli/internal/ui"
 
 	"github.com/charmbracelet/x/ansi"
@@ -96,6 +97,27 @@ func (v *ConversationView) RecordPanel(title string, lines []ui.PanelLine) {
 	v.mu.Lock()
 	v.entries = append(v.entries, displayEntry{panelTitle: title, panelLines: cloned})
 	v.mu.Unlock()
+}
+
+// RecordSourceReferences retains compact, path-safe references for a request.
+func (v *ConversationView) RecordSourceReferences(sources []chatcontext.SourceRef) []ui.PanelLine {
+	if v == nil || len(sources) == 0 {
+		return nil
+	}
+	lines := make([]ui.PanelLine, 0, len(sources))
+	for _, source := range sources {
+		state := source.State
+		if state == "" {
+			state = chatcontext.SourceStateActive
+		}
+		kind := source.Kind
+		if kind == "" {
+			kind = "unknown"
+		}
+		lines = append(lines, ui.PanelLine{{Text: fmt.Sprintf("%s · %s · %s · %s · %s", source.ID, kind, displaySourceName(source), approximateSizeLabel(source.SizeBytes), state), Style: ui.PanelInfo}})
+	}
+	v.RecordPanel("Sources for this exchange", lines)
+	return lines
 }
 
 // UpdatePanel replaces the most recently retained panel with the same title,

@@ -101,8 +101,14 @@ func TestRequestShowsDurableOptimizationNoticeOnlyWhenContentChanges(t *testing.
 	if _, err := processInputWithFetcher(context.Background(), c, "q", &config.Config{}, renderStreamToString, fetch); err != nil {
 		t.Fatalf("optimized request failed: %v", err)
 	}
-	if len(view.entries) != 1 || view.entries[0].panelTitle != "Context optimization" {
-		t.Fatalf("durable notice entries = %+v, want one context optimization panel", view.entries)
+	foundNotice := false
+	for _, entry := range view.entries {
+		if entry.panelTitle == "Context optimization" {
+			foundNotice = true
+		}
+	}
+	if !foundNotice {
+		t.Fatalf("durable notice entries = %+v, want a context optimization panel", view.entries)
 	}
 	if len(c.LastOptimizationChanges) != 1 || c.LastOptimizationChanges[0].State != chatcontext.SourceStateOmitted {
 		t.Fatalf("last optimization changes = %+v, want the omitted source", c.LastOptimizationChanges)
@@ -130,5 +136,89 @@ func TestRequestWithoutOptimizationClearsPreviousChangesAndShowsNoNotice(t *test
 	}
 	if len(view.entries) != 0 {
 		t.Fatalf("unexpected durable panel entries for request without an optimization change: %+v", view.entries)
+	}
+}
+
+func TestSourceLabelsAreAddedToSubmittedPromptAndLatestTurnOnly(t *testing.T) {
+	first := chatcontext.SourceRef{ID: "source-1", Kind: chatcontext.SourceKindFile, Name: "older.md", URI: "/private/older.md", SizeBytes: 80, State: chatcontext.SourceStateActive}
+	second := chatcontext.SourceRef{ID: "source-2", Kind: chatcontext.SourceKindURL, Name: "https://example.test/guide", URI: "https://example.test/guide", SizeBytes: 120, State: chatcontext.SourceStateActive}
+	c := &Chat{
+		Messages: []Message{
+			{Role: "user", Content: "[File Context]\nolder context", Sources: []chatcontext.SourceRef{first}},
+			{Role: "assistant", Content: "earlier answer"},
+		},
+		PendingSources: []chatcontext.SourceRef{second},
+	}
+	var submitted string
+	fetch := func(_ context.Context, content string) (<-chan string, error) {
+		submitted = content
+		stream := make(chan string, 1)
+		stream <- "answer"
+		close(stream)
+		return stream, nil
+	}
+	if _, err := processInputWithFetcher(context.Background(), c, "Compare them.", &config.Config{}, renderStreamToString, fetch); err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	for _, want := range []string{"[Source references]", "[1] source-1 · file · older.md", "[2] source-2 · url · https://example.test/guide"} {
+		if !strings.Contains(submitted, want) {
+			t.Errorf("submitted prompt lacks %q: %s", want, submitted)
+		}
+	}
+	if strings.Contains(submitted, "/private/older.md") {
+		t.Fatalf("source labels exposed a local path: %s", submitted)
+	}
+	var latestUser *Message
+	for i := range c.Messages {
+		if c.Messages[i].Role == "user" {
+			latestUser = &c.Messages[i]
+		}
+	}
+	if latestUser == nil || len(latestUser.Sources) != 1 || latestUser.Sources[0].ID != "source-2" {
+		t.Fatalf("latest user source association = %+v, want only the source supplied for this turn", latestUser)
+	}
+	if !strings.Contains(latestUser.Content, "[Source references]") {
+		t.Fatalf("latest user message did not retain its source labels: %q", latestUser.Content)
+	}
+}
+
+func TestRequestWithoutSourceMetadataKeepsPromptUnchanged(t *testing.T) {
+	c := &Chat{}
+	var submitted string
+	fetch := func(_ context.Context, content string) (<-chan string, error) {
+		submitted = content
+		stream := make(chan string, 1)
+		stream <- "answer"
+		close(stream)
+		return stream, nil
+	}
+	if _, err := processInputWithFetcher(context.Background(), c, "plain question", &config.Config{}, renderStreamToString, fetch); err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if submitted != "plain question" {
+		t.Fatalf("submitted prompt = %q, want unchanged prompt without source metadata", submitted)
+	}
+	if strings.Contains(c.Messages[0].Content, "Source references") {
+		t.Fatalf("user history gained source labels without metadata: %q", c.Messages[0].Content)
+	}
+}
+
+func TestSourceReferencePanelIsRetainedInConversationView(t *testing.T) {
+	view := NewConversationView("", "", false)
+	view.RecordSourceReferences([]chatcontext.SourceRef{{ID: "source-1", Kind: chatcontext.SourceKindFile, Name: "notes.txt", URI: "/home/alice/private/notes.txt", SizeBytes: 16, State: chatcontext.SourceStateActive}})
+	if len(view.entries) != 1 || view.entries[0].panelTitle != "Sources for this exchange" {
+		t.Fatalf("source reference panel entries = %+v", view.entries)
+	}
+	var lines strings.Builder
+	for _, line := range view.entries[0].panelLines {
+		for _, span := range line {
+			lines.WriteString(span.Text)
+		}
+	}
+	if !strings.Contains(lines.String(), "notes.txt") || !strings.Contains(lines.String(), "source-1") {
+		t.Fatalf("source reference panel lacks compact reference: %s", lines.String())
+	}
+	if strings.Contains(lines.String(), "/home/alice/private") {
+		t.Fatalf("source reference panel exposed local path: %s", lines.String())
 	}
 }

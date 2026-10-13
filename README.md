@@ -133,6 +133,8 @@ These slash commands are typed at the `You:` prompt after the interactive chat s
 | `/file <path> [-- prompt]`              | Add a file to chat or ask about it directly       |
 | `/url <url> [-- prompt]`                | Add a web page to chat or ask about it directly   |
 | `/library [command] [args] [-- prompt]` | Manage local file libraries and use their content |
+| `/context`                              | Show retained sources, approximate sizes, and optimization state |
+| `/sources`                              | Show source references supplied with the latest exchange |
 | `/prompt [command]`                     | Add, edit, list, load, or remove saved prompts    |
 
 #### Export and services
@@ -148,7 +150,7 @@ These slash commands are typed at the `You:` prompt after the interactive chat s
 | `/version`                           | Show version information                           |
 | `/exit`                              | Close the interactive chat                         |
 
-Use `&&` to combine `/file`, `/url`, and `/search` before a prompt. `/library`, `/prompt`, `/image`, `/coordinate`, and `/speak` are standalone commands. The [user guide](docs/USAGE.md) has examples and more detail about each command.
+Use `&&` to combine `/file`, `/url`, and `/search` before a prompt. `/library`, `/prompt`, `/image`, `/coordinate`, and `/speak` are standalone commands. `/context` and `/sources` show source references retained for chat; byte-to-token counts are rough estimates using about four bytes per token. Numbered source labels are sent to Duck.ai only when source metadata exists. Default panels and labels show short file names rather than local paths; a Markdown conversation export includes each source URI so exported references remain useful. The [user guide](docs/USAGE.md) has examples and more detail about each command.
 
 Run `/coordinate` to choose two or three Duck.ai models, edit their roles, and select a chain, independent-answer, or debate flow for your next question. Each strategy starts with two prefilled agents and role suggestions suited to its workflow. Model and role choices are saved separately for Independent, Chain, and Debate, so switching strategies restores that strategy’s preset. The menu shows planned requests (retries excluded) and maximum concurrency. Independent and Debate can run independent steps in parallel. Model, role, and strategy edits are saved locally as you make them. On failure, resume incomplete stages, request a clearly marked partial synthesis when outputs are missing, or stop without changing conversation history. A result panel lists the models, roles, completed stages, and whether synthesis used all planned outputs. Prompts and intermediate outputs stay in memory for the current run. Use `/coordinate cancel` to clear a pending selection. See the [coordinate guide](docs/USAGE.md#coordinate-models-for-one-question) for details.
 

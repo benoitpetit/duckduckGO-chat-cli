@@ -128,8 +128,8 @@ func TestImageFilePromptQueuesAttachmentWithPrompt(t *testing.T) {
 	if requested != "describe this duck" {
 		t.Fatalf("requested prompt = %q, want %q", requested, "describe this duck")
 	}
-	if message.Content != requested || len(message.Images) != 1 || message.Images[0].MIMEType != "image/webp" || !bytes.Equal(message.Images[0].Data, expected.Data) {
-		t.Fatalf("submitted user message = %+v, want prompt and image in one message", message)
+	if !strings.HasPrefix(message.Content, requested) || !strings.Contains(message.Content, "[1] source-1 · image · logo.png") || len(message.Images) != 1 || message.Images[0].MIMEType != "image/webp" || !bytes.Equal(message.Images[0].Data, expected.Data) {
+		t.Fatalf("submitted user message = %+v, want prompt, source label, and image in one message", message)
 	}
 	if len(message.Sources) != 1 || message.Sources[0].Kind != chatcontext.SourceKindImage || message.Sources[0].Name != "logo.png" {
 		t.Fatalf("submitted image sources = %+v, want image reference on the prompt", message.Sources)

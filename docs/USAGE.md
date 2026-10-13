@@ -46,6 +46,8 @@ Type `/help` in the CLI for the current command list.
 | `/clear` | Save the current conversation and start a fresh chat session |
 | `/config` | Change the model, appearance, shortcuts, and other settings |
 | `/coordinate [cancel]` | Coordinate selected Duck.ai models for the next question |
+| `/context` | Show retained source counts, approximate sizes, and optimization state |
+| `/sources` | Show references supplied with the latest exchange |
 | `/copy` | Copy a response or code block |
 | `/dashboard <on\|off\|open\|status>` | Control or open the local dashboard |
 | `/exit` | Close the interactive CLI |
@@ -65,6 +67,8 @@ Type `/help` in the CLI for the current command list.
 | `/url <url> [-- prompt]` | Add a web page to chat context or ask about it directly |
 | `/version` | Show version and system information |
 | `/api [port]` | Start or stop the local HTTP API |
+
+`/context` groups retained sources by type and shows whether optimization compressed, truncated, or omitted any content. `/sources` lists the references that remain in the request context for the latest exchange. Token counts are approximate, estimated as one token per four source bytes. When source metadata exists, the prompt includes numbered labels such as `[1] source-1 · file · notes.md`; these identify supplied context and are not verified citations. Labels and default panels use short local file names and do not reveal local paths. Markdown conversation exports include source URIs, which can contain full local paths.
 
 ### Add context to a message
 
