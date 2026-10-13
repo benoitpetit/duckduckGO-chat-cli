@@ -141,12 +141,15 @@ Appearance options include the `official`, `retro`, `mono`, `dracula`, and `nord
 
 `/search <query>` runs a web search and adds the results to the conversation. Add `-- <question>` to ask about the results immediately. Duck.ai's built-in web search is a separate optional feature. In `/config`, open **Duck.ai Native Tools** to let Duck.ai decide when a prompt needs current web results.
 
-`/file` accepts text files and PNG, JPEG, or WebP images. Image files must be no larger than 10 MiB. For example:
+`/file` accepts text files, text-based PDFs, and PNG, JPEG, or WebP images. Ordinary files, PDF input, and extracted PDF text are each limited to 10 MiB. PDF text is labeled by page (for example, `[Page 3]`) so answers can refer to the original page. `/library` can load PDFs too and keeps its existing 2 MiB aggregate context limit. For example:
 
 ```text
 /file src/main.go -- Explain the request flow.
+/file docs/report.pdf -- Summarize the findings and identify the relevant pages.
 /file photos/diagram.png -- Describe this diagram.
 ```
+
+PDF import extracts embedded text only. It does not run OCR, so scanned PDFs with no embedded text cannot be used. Password-protected, malformed, empty-text, and oversized PDFs produce an error before any context is added.
 
 When an image is added without a prompt, it is attached to your next message. Image input support depends on the selected Duck.ai model. If that model cannot accept images, the CLI uses GPT-5.4 Mini for that request and says so in the chat.
 
