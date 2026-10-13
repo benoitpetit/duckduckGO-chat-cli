@@ -525,6 +525,7 @@ func printCLIUsage(out io.Writer) {
 		command("/coordinate [cancel]", "Coordinate models for the next question"),
 		command("/speak", "Start a voice chat"),
 		command("/history", "Browse saved conversations"),
+		command("/sessions [query]", "Find, organize, restore, or delete saved sessions"),
 		command("/config", "Change settings"),
 		command("/clear", "Start a fresh chat"),
 		command("/exit", "Close the chat"),
@@ -1289,6 +1290,12 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, cmd *command.Comm
 		}
 	case cmd.Type == "/history":
 		chat.PrintHistory(chatSession)
+	case cmd.Type == "/sessions":
+		withResizeRedrawSuspended(chatSession, func() {
+			if err := chat.HandleSessionsCommand(chatSession, cmd.Args); err != nil {
+				ui.Errorln("Session manager failed: %v", err)
+			}
+		})
 	case cmd.Type == "/context":
 		chat.HandleContextCommand(chatSession)
 	case cmd.Type == "/sources":

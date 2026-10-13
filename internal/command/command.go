@@ -76,6 +76,12 @@ func GetCommandRegistry() *CommandRegistry {
 				Usage:       "/history",
 				Category:    "core",
 			},
+			"/sessions": {
+				Name:        "/sessions",
+				Description: "Find, organize, restore, or delete saved sessions",
+				Usage:       "/sessions [query]",
+				Category:    "core",
+			},
 			"/context": {
 				Name:        "/context",
 				Description: "Show retained context sources and approximate sizes",
@@ -190,7 +196,7 @@ func GetCommandRegistry() *CommandRegistry {
 		},
 	}
 	for name, examples := range map[string][]string{
-		"/help": {"/help"}, "/exit": {"/exit"}, "/speak": {"/speak"}, "/image": {"/image", "/image a bird flying"}, "/issue": {"/issue"}, "/clear": {"/clear"}, "/history": {"/history"},
+		"/help": {"/help"}, "/exit": {"/exit"}, "/speak": {"/speak"}, "/image": {"/image", "/image a bird flying"}, "/issue": {"/issue"}, "/clear": {"/clear"}, "/history": {"/history"}, "/sessions": {"/sessions", "/sessions planning"},
 		"/context": {"/context"}, "/sources": {"/sources"},
 		"/search":  {"/search Go concurrency", "/search Go concurrency -- Summarize the results"},
 		"/file":    {"/file ./README.md", "/file ./main.go -- Explain this code"},

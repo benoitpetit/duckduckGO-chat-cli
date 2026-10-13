@@ -147,6 +147,7 @@ func TestPrintWelcomeMessageDrawsResponsiveHelpPanel(t *testing.T) {
 	}
 	for command, section := range map[string]string{
 		"/file <path>":  "Context & Prompts:",
+		"/sessions":     "Chat & Session:",
 		"/context":      "Context & Prompts:",
 		"/sources":      "Context & Prompts:",
 		"/image [idea]": "Create & Share:",
