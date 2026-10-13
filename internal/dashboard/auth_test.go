@@ -31,9 +31,11 @@ func authEnabledServer(t *testing.T) *Server {
 func authRequest(server *Server, method, path string, body []byte, cookie *http.Cookie) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, "http://"+server.expectedHost()+path, bytes.NewReader(body))
 	req.RemoteAddr = "127.0.0.1:12345"
-	if method == http.MethodPost {
+	if method == http.MethodPost || method == http.MethodPatch || method == http.MethodDelete {
 		req.Header.Set("Origin", "http://"+server.expectedHost())
-		req.Header.Set("Content-Type", "application/json")
+		if len(body) > 0 {
+			req.Header.Set("Content-Type", "application/json")
+		}
 	}
 	if cookie != nil {
 		req.AddCookie(cookie)

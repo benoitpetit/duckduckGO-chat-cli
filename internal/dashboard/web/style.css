@@ -160,6 +160,9 @@ select:focus, input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px #
 .session-item span { overflow: hidden; color: #aab1bc; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .session-detail { min-height: 300px; }
 .detail-meta { display: flex; align-items: start; justify-content: space-between; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.session-actions { display: flex; justify-content: end; gap: 6px; flex-wrap: wrap; }
+.button.danger { border-color: #693b38; background: #2a1c1c; color: #ffaaa0; }
+.button.danger:hover { background: #3a2221; }
 .detail-meta p { margin: 6px 0 0; color: var(--muted); font-size: 10px; }
 .transcript { display: grid; gap: 12px; max-height: calc(100vh - 320px); overflow: auto; padding-top: 17px; }
 .message { max-width: 88%; padding: 11px 13px; border: 1px solid #282e37; border-radius: 4px; background: #171b21; color: #d7dce3; font-size: 11px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }

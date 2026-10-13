@@ -110,3 +110,25 @@ func TestDashboardLoginFormUsesPOSTFallback(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionMutationUIIsConditionalAndConfirmsDeletion(t *testing.T) {
+	app, err := webFiles.ReadFile("web/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := webFiles.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"if (state.settings?.showConversations)", `method: "PATCH"`, `method: "DELETE"`, "window.confirm(sessionDeleteConfirmation(summary))"} {
+		if !bytes.Contains(app, []byte(expected)) {
+			t.Errorf("session controls do not contain %q", expected)
+		}
+	}
+	if strings.Index(string(app), "window.confirm(sessionDeleteConfirmation(summary))") > strings.Index(string(app), `method: "DELETE"`) {
+		t.Fatal("dashboard issues DELETE before asking for confirmation")
+	}
+	if !bytes.Contains(page, []byte(`id="page-sessions"`)) || !bytes.Contains(page, []byte(`id="sessionDetail"`)) {
+		t.Fatal("session detail panel is missing from the dashboard")
+	}
+}

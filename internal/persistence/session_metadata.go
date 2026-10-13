@@ -1,12 +1,15 @@
 package persistence
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"unicode"
 
 	"duckduckgo-chat-cli/internal/intelligence"
 )
+
+var ErrInvalidSessionMetadata = errors.New("invalid session metadata")
 
 const (
 	maxSessionTitleRunes = 100
@@ -24,7 +27,7 @@ type SessionMetadata struct {
 func validateSessionMetadata(metadata SessionMetadata) (SessionMetadata, error) {
 	metadata.Title = normalizeSessionText(metadata.Title)
 	if len([]rune(metadata.Title)) > maxSessionTitleRunes {
-		return SessionMetadata{}, fmt.Errorf("session title must be at most %d characters", maxSessionTitleRunes)
+		return SessionMetadata{}, fmt.Errorf("%w: title must be at most %d characters", ErrInvalidSessionMetadata, maxSessionTitleRunes)
 	}
 
 	tags := make([]string, 0, len(metadata.Tags))
@@ -35,7 +38,7 @@ func validateSessionMetadata(metadata SessionMetadata) (SessionMetadata, error) 
 			continue
 		}
 		if len([]rune(tag)) > maxSessionTagRunes {
-			return SessionMetadata{}, fmt.Errorf("session tags must be at most %d characters", maxSessionTagRunes)
+			return SessionMetadata{}, fmt.Errorf("%w: tags must be at most %d characters", ErrInvalidSessionMetadata, maxSessionTagRunes)
 		}
 		key := strings.ToLower(tag)
 		if _, exists := seen[key]; exists {
@@ -44,7 +47,7 @@ func validateSessionMetadata(metadata SessionMetadata) (SessionMetadata, error) 
 		seen[key] = struct{}{}
 		tags = append(tags, tag)
 		if len(tags) > maxSessionTags {
-			return SessionMetadata{}, fmt.Errorf("a session can have at most %d tags", maxSessionTags)
+			return SessionMetadata{}, fmt.Errorf("%w: a session can have at most %d tags", ErrInvalidSessionMetadata, maxSessionTags)
 		}
 	}
 	metadata.Tags = tags

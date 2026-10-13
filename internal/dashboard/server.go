@@ -151,6 +151,8 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /api/commands", s.handleCommands)
 	mux.HandleFunc("GET /api/sessions", s.handleSessions)
 	mux.HandleFunc("GET /api/sessions/{id}", s.handleSessionDetail)
+	mux.HandleFunc("PATCH /api/sessions/{id}", s.handleSessionMetadataUpdate)
+	mux.HandleFunc("DELETE /api/sessions/{id}", s.handleSessionDelete)
 	mux.HandleFunc("POST /api/analysis/metrics", s.handleMetricsAnalysis)
 	mux.HandleFunc("GET /api/analysis/conversations/preview", s.handleConversationPreview)
 	mux.HandleFunc("POST /api/analysis/conversations", s.handleConversationAnalysis)
@@ -168,7 +170,7 @@ func (s *Server) handler() http.Handler {
 			http.Error(w, "invalid Host", http.StatusForbidden)
 			return
 		}
-		if r.Method == http.MethodPost {
+		if r.Method == http.MethodPost || r.Method == http.MethodPatch || r.Method == http.MethodDelete {
 			origin := r.Header.Get("Origin")
 			if origin == "" || origin != "http://"+s.expectedHost() {
 				http.Error(w, "cross-origin request denied", http.StatusForbidden)

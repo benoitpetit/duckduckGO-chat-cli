@@ -495,8 +495,8 @@ async function loadSessions() {
     if (!sessions.length) { const empty = document.createElement("div"); empty.className = "empty-state"; empty.textContent = "No archived conversations match your search."; root.append(empty); return; }
     sessions.forEach(session => {
       const button = document.createElement("button"); button.className = `session-item${state.selectedSession === session.id ? " selected" : ""}`;
-      const title = document.createElement("strong"); title.textContent = session.first_message || "New conversation";
-      const meta = document.createElement("small"); meta.textContent = `${date(session.start_time, true)} · ${session.model || "Unknown model"} · ${number(session.message_count)} messages`;
+      const title = document.createElement("strong"); title.textContent = `${session.favorite ? "★ " : ""}${session.title || session.first_message || "New conversation"}`;
+      const meta = document.createElement("small"); meta.textContent = `${date(session.start_time, true)} · ${session.model || "Unknown model"} · ${number(session.message_count)} messages${session.tags?.length ? ` · ${session.tags.join(", ")}` : ""}`;
       const id = document.createElement("span"); id.textContent = session.id;
       button.append(title, meta, id); button.addEventListener("click", () => loadSessionDetail(session)); root.append(button);
     });
@@ -511,7 +511,7 @@ async function loadSessionDetail(summary) {
     root.replaceChildren();
     const head = document.createElement("div"); head.className = "detail-meta";
     const info = document.createElement("div");
-    const title = document.createElement("strong"); title.textContent = summary.first_message || "New conversation";
+    const title = document.createElement("strong"); title.textContent = summary.title || summary.first_message || "New conversation";
     const meta = document.createElement("p"); meta.textContent = `${date(summary.start_time, true)} · ${session.model || "Unknown model"} · ${number(summary.message_count)} messages`;
     info.append(title, meta);
     const copy = document.createElement("button"); copy.className = "button secondary"; copy.textContent = "Copy resume command";
@@ -519,7 +519,38 @@ async function loadSessionDetail(summary) {
       try { await navigator.clipboard.writeText(summary.resume_command); notify(`Command copied: ${summary.resume_command}`); }
       catch { notify(`Copy this into the terminal: ${summary.resume_command}`); }
     });
-    head.append(info, copy);
+    const actions = document.createElement("div"); actions.className = "session-actions";
+    actions.append(copy);
+    if (state.settings?.showConversations) {
+      const rename = document.createElement("button"); rename.className = "button secondary"; rename.textContent = "Rename";
+      rename.addEventListener("click", async () => {
+        const nextTitle = window.prompt("Session title", summary.title || "");
+        if (nextTitle === null) return;
+        await updateSessionMetadata(summary, { title: nextTitle });
+      });
+      const editTags = document.createElement("button"); editTags.className = "button secondary"; editTags.textContent = "Edit tags";
+      editTags.addEventListener("click", async () => {
+        const nextTags = window.prompt("Comma-separated tags (leave empty to clear)", (summary.tags || []).join(", "));
+        if (nextTags === null) return;
+        await updateSessionMetadata(summary, { tags: nextTags.split(",").map(tag => tag.trim()).filter(Boolean) });
+      });
+      const favorite = document.createElement("button"); favorite.className = "button secondary"; favorite.textContent = summary.favorite ? "Remove favorite" : "Add favorite";
+      favorite.addEventListener("click", async () => updateSessionMetadata(summary, { favorite: !summary.favorite }));
+      const remove = document.createElement("button"); remove.className = "button danger"; remove.textContent = "Delete";
+      remove.addEventListener("click", async () => {
+        if (!window.confirm(sessionDeleteConfirmation(summary))) return;
+        try {
+          await api(`/api/sessions/${encodeURIComponent(summary.id)}`, { method: "DELETE" });
+          state.selectedSession = "";
+          const empty = document.createElement("div"); empty.className = "empty-state"; empty.textContent = "Select a conversation to view its contents.";
+          $("#sessionDetail").replaceChildren(empty);
+          await loadSessions();
+          notify(`Deleted session ${summary.id}.`);
+        } catch (error) { notify(`Could not delete session: ${error.message}`); }
+      });
+      actions.append(rename, editTags, favorite, remove);
+    }
+    head.append(info, actions);
     const transcript = document.createElement("div"); transcript.className = "transcript";
     (session.messages || session.Messages || []).forEach(message => {
       const article = document.createElement("div"); article.className = `message ${(message.role || message.Role) === "user" ? "user" : "assistant"}`;
@@ -528,8 +559,31 @@ async function loadSessionDetail(summary) {
       article.append(role, content); transcript.append(article);
     });
     root.append(head, transcript);
-    loadSessions();
   } catch (error) { root.textContent = `Conversation unavailable: ${error.message}`; }
+}
+
+function sessionDeleteConfirmation(summary) {
+  return `Delete “${summary.title || "Untitled conversation"}” (${summary.id})? This cannot be undone.`;
+}
+
+async function updateSessionMetadata(summary, changes) {
+  const metadata = {
+    title: summary.title || "",
+    tags: summary.tags || [],
+    favorite: Boolean(summary.favorite),
+    ...changes,
+  };
+  try {
+    await api(`/api/sessions/${encodeURIComponent(summary.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(metadata),
+    });
+    await loadSessions();
+    const updated = state.sessions.find(session => session.id === summary.id) || { ...summary, ...changes };
+    await loadSessionDetail(updated);
+    notify("Session details updated.");
+  } catch (error) { notify(`Could not update session: ${error.message}`); }
 }
 
 function escapeText(value) {
