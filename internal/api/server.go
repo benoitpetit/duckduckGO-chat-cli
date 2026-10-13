@@ -159,6 +159,7 @@ func setupRouter(session *Session, cfg *config.Config) *gin.Engine {
 	{
 		// Chat endpoints
 		v1.POST("/chat", ChatHandler(session))
+		v1.POST("/chat/stream", StreamingChatHandler(session))
 		v1.GET("/history", HistoryHandler(session))
 		v1.DELETE("/history", ClearHistoryHandler(session))
 

@@ -773,6 +773,48 @@ func ProcessInputContext(ctx context.Context, c *Chat, input string, cfg *config
 	return processInput(ctx, c, input, cfg, renderStreamToString)
 }
 
+// ProcessInputContextStream submits a chat prompt and forwards each response
+// chunk to onDelta. If the callback fails, generation is cancelled and the
+// partial user/assistant turn is rolled back.
+func ProcessInputContextStream(ctx context.Context, c *Chat, input string, cfg *config.Config, onDelta func(string) error) (string, error) {
+	if c == nil {
+		return "", fmt.Errorf("chat session is required")
+	}
+	return processInputContextStreamWithFetcher(ctx, c, input, cfg, onDelta, c.FetchStreamWithErrors)
+}
+
+func processInputContextStreamWithFetcher(ctx context.Context, c *Chat, input string, cfg *config.Config, onDelta func(string) error, fetch func(context.Context, string) (<-chan string, <-chan error, error)) (string, error) {
+	if c == nil {
+		return "", fmt.Errorf("chat session is required")
+	}
+	if onDelta == nil {
+		return "", fmt.Errorf("stream delta callback is required")
+	}
+	streamCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var callbackErr error
+	render := func(chunks <-chan string) string {
+		var fullResponse strings.Builder
+		for chunk := range chunks {
+			fullResponse.WriteString(chunk)
+			if callbackErr != nil || chunk == "" {
+				continue
+			}
+			if err := onDelta(chunk); err != nil {
+				callbackErr = err
+				cancel()
+			}
+		}
+		return fullResponse.String()
+	}
+	c.LastOptimizationChanges = nil
+	response, err := processInputWithStreamFetcherAndTokenRoles(streamCtx, c, input, cfg, render, fetch, len(input), 0)
+	if callbackErr != nil {
+		return "", callbackErr
+	}
+	return response, err
+}
+
 func processInput(ctx context.Context, c *Chat, input string, cfg *config.Config, render func(<-chan string) string) (string, error) {
 	return processInputWithStreamFetcher(ctx, c, input, cfg, render, c.FetchStreamWithErrors)
 }

@@ -222,6 +222,47 @@ paths:
       summary: Send a chat message
       tags:
       - Chat
+  /chat/stream:
+    post:
+      consumes:
+      - application/json
+      description: Send a chat message and receive start, delta, and terminal SSE
+        events
+      parameters:
+      - description: Chat message request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/ChatRequest'
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: 'Server-sent events: start, delta, done, or error'
+          schema:
+            type: string
+        "400":
+          description: Invalid request
+          schema:
+            allOf:
+            - $ref: '#/definitions/APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/APIError'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            allOf:
+            - $ref: '#/definitions/APIResponse'
+            - properties:
+                error:
+                  $ref: '#/definitions/APIError'
+              type: object
+      summary: Stream a chat response
+      tags:
+      - Chat
   /health:
     get:
       description: Check the health status of the API server

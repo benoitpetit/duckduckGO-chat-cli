@@ -4,6 +4,7 @@
 //
 // The API allows you to:
 // - Send messages to various AI models
+// - Stream chat responses with server-sent events
 // - Retrieve chat history
 // - Manage AI models
 // - Monitor system health

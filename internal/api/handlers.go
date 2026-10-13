@@ -1,6 +1,8 @@
 package api
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -107,6 +109,137 @@ func ChatHandler(session *Session) gin.HandlerFunc {
 		successResponse := NewSuccessResponse(chatResponse, "Chat message processed successfully")
 		c.JSON(http.StatusOK, successResponse)
 	}
+}
+
+// StreamingChatHandler sends chat response chunks as server-sent events.
+// @Summary      Stream a chat response
+// @Description  Send a chat message and receive start, delta, and terminal SSE events
+// @Tags         Chat
+// @Accept       json
+// @Produce      text/event-stream
+// @Param        request body ChatRequest true "Chat message request"
+// @Success      200 {string} string "Server-sent events: start, delta, done, or error"
+// @Failure      400 {object} APIResponse{error=APIError} "Invalid request"
+// @Failure      401 {object} APIResponse{error=APIError} "Unauthorized"
+// @Router       /chat/stream [post]
+func StreamingChatHandler(session *Session) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session.mu.Lock()
+		defer session.mu.Unlock()
+		chatSession, cfg := session.chat, session.cfg
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
+		var req ChatRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, NewErrorResponse(ErrorCodeValidation, "Invalid request payload", err.Error()))
+			return
+		}
+		if req.Message == "" {
+			c.JSON(http.StatusBadRequest, NewErrorResponse(ErrorCodeValidation, "Message cannot be empty", "Field 'message' is required and cannot be empty"))
+			return
+		}
+		if len(req.Message) > 10000 {
+			c.JSON(http.StatusBadRequest, NewErrorResponse(ErrorCodeValidation, "Message is too long", "Field 'message' must be at most 10000 characters"))
+			return
+		}
+		if req.Model != "" {
+			newModel, ok := models.ResolveModel(req.Model)
+			if !ok {
+				c.JSON(http.StatusBadRequest, NewErrorResponse(ErrorCodeModelNotFound, "Model not found", fmt.Sprintf("Model '%s' is not available", req.Model)))
+				return
+			}
+			if newModel != chatSession.Model {
+				chatSession.ChangeModel(newModel)
+			}
+		}
+		if cfg.API.LogRequests {
+			ui.APILog("Received streaming chat request from %s (%d characters)", c.ClientIP(), len(req.Message))
+		}
+
+		c.Header("Content-Type", "text/event-stream; charset=utf-8")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Header("X-Accel-Buffering", "no")
+		c.Status(http.StatusOK)
+		if err := writeSSEEvent(c, "start", gin.H{"model": string(chatSession.Model)}); err != nil {
+			return
+		}
+
+		processor := session.streamProcessor
+		if processor == nil {
+			processor = chat.ProcessInputContextStream
+		}
+		writeFailed := false
+		onDelta := func(delta string) error {
+			if delta == "" {
+				return nil
+			}
+			if err := writeSSEEvent(c, "delta", gin.H{"delta": delta}); err != nil {
+				writeFailed = true
+				return err
+			}
+			return nil
+		}
+		startedAt := time.Now()
+		response, err := processor(c.Request.Context(), chatSession, req.Message, cfg, onDelta)
+		processingTime := time.Since(startedAt)
+		if writeFailed || c.Request.Context().Err() != nil {
+			if chatSession.Analytics != nil {
+				chatSession.Analytics.RecordAPICall(processingTime, false, "cancelled")
+			}
+			return
+		}
+		if err != nil {
+			apiError := streamAPIError(err)
+			if chatSession.Analytics != nil {
+				chatSession.Analytics.RecordAPICall(processingTime, false, apiError.Code)
+			}
+			_ = writeSSEEvent(c, "error", apiError)
+			return
+		}
+		if chatSession.Analytics != nil {
+			chatSession.Analytics.RecordAPICall(processingTime, true, "")
+		}
+		payload := struct {
+			Model     string       `json:"model"`
+			MessageID string       `json:"message_id"`
+			Metadata  ChatMetadata `json:"metadata"`
+		}{
+			Model:     string(chatSession.Model),
+			MessageID: generateMessageID(len(chatSession.Messages)),
+			Metadata: ChatMetadata{
+				ProcessingTime:    processingTime.Milliseconds(),
+				TokensEstimate:    estimateTokens(response),
+				ConversationCount: len(chatSession.Messages),
+			},
+		}
+		if cfg.API.LogRequests {
+			responseSnippet := response
+			if len(responseSnippet) > 100 {
+				responseSnippet = responseSnippet[:100] + "..."
+			}
+			ui.APILog("Completed streaming chat request for %s (%d characters)", c.ClientIP(), len(responseSnippet))
+		}
+		_ = writeSSEEvent(c, "done", payload)
+	}
+}
+
+func writeSSEEvent(c *gin.Context, event string, payload any) error {
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", event, encoded); err != nil {
+		return err
+	}
+	c.Writer.Flush()
+	return nil
+}
+
+func streamAPIError(err error) *APIError {
+	if errors.Is(err, chat.ErrRateLimited) {
+		return &APIError{Code: ErrorCodeRateLimit, Message: "Request was rate limited", Details: err.Error()}
+	}
+	return &APIError{Code: ErrorCodeChatError, Message: "Error processing chat message", Details: err.Error()}
 }
 
 // HistoryHandler handles chat history requests

@@ -2,10 +2,17 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"duckduckgo-chat-cli/internal/chat"
 	"duckduckgo-chat-cli/internal/config"
@@ -30,6 +37,182 @@ func newRouteTestServer(t *testing.T) (*gin.Engine, *chat.Chat) {
 		},
 	}
 	return setupRouter(NewSession(conversation, cfg), cfg), conversation
+}
+
+func newStreamingRouteTestServer(t *testing.T, cfg *config.Config, processor streamProcessor) (*gin.Engine, *chat.Chat, *Session) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	conversation := &chat.Chat{Model: models.Default(), SessionID: "stream-session", HistoryManager: persistence.NewHistoryManager(t.TempDir())}
+	session := NewSession(conversation, cfg)
+	session.streamProcessor = processor
+	return setupRouter(session, cfg), conversation, session
+}
+
+func TestAPIStreamEmitsOrderedDeltasAndDoneMetadata(t *testing.T) {
+	processor := func(_ context.Context, _ *chat.Chat, _ string, _ *config.Config, onDelta func(string) error) (string, error) {
+		for _, delta := range []string{"Hello", ", ", "world"} {
+			if err := onDelta(delta); err != nil {
+				return "", err
+			}
+		}
+		return "Hello, world", nil
+	}
+	router, _, _ := newStreamingRouteTestServer(t, &config.Config{}, processor)
+	response := performJSONRequest(router, http.MethodPost, "/api/v1/chat/stream", ChatRequest{Message: "hello"})
+	if response.Code != http.StatusOK || !strings.HasPrefix(response.Header().Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("stream status=%d content-type=%q body=%s", response.Code, response.Header().Get("Content-Type"), response.Body.String())
+	}
+	body := response.Body.String()
+	positions := []int{
+		strings.Index(body, "event: start\n"),
+		strings.Index(body, `"delta":"Hello"`),
+		strings.Index(body, `"delta":", "`),
+		strings.Index(body, `"delta":"world"`),
+		strings.Index(body, "event: done\n"),
+	}
+	for i, position := range positions {
+		if position < 0 || (i > 0 && position <= positions[i-1]) {
+			t.Fatalf("SSE events are missing or out of order at index %d: positions=%v body=%s", i, positions, body)
+		}
+	}
+	var done struct {
+		Model     string       `json:"model"`
+		MessageID string       `json:"message_id"`
+		Metadata  ChatMetadata `json:"metadata"`
+	}
+	if err := json.Unmarshal([]byte(sseDataForEvent(t, body, "done")), &done); err != nil {
+		t.Fatalf("decode done event: %v", err)
+	}
+	if done.Model != string(models.Default()) || done.MessageID == "" || done.Metadata.ConversationCount != 0 {
+		t.Fatalf("done payload = %+v", done)
+	}
+	if strings.Contains(sseDataForEvent(t, body, "done"), `"response"`) {
+		t.Fatal("done event duplicated the response instead of letting clients join deltas")
+	}
+}
+
+func TestAPIStreamEmitsTerminalErrorWithoutDone(t *testing.T) {
+	processor := func(context.Context, *chat.Chat, string, *config.Config, func(string) error) (string, error) {
+		return "", chat.ErrRateLimited
+	}
+	router, _, _ := newStreamingRouteTestServer(t, &config.Config{}, processor)
+	response := performJSONRequest(router, http.MethodPost, "/api/v1/chat/stream", ChatRequest{Message: "hello"})
+	body := response.Body.String()
+	if response.Code != http.StatusOK || !strings.Contains(body, "event: error\n") || strings.Contains(body, "event: done\n") || !strings.Contains(body, ErrorCodeRateLimit) {
+		t.Fatalf("rate limit stream = status %d body %q", response.Code, body)
+	}
+}
+
+func TestAPIStreamStopsAfterClientWriteFailure(t *testing.T) {
+	var callbackErr error
+	processor := func(_ context.Context, _ *chat.Chat, _ string, _ *config.Config, onDelta func(string) error) (string, error) {
+		callbackErr = onDelta("partial")
+		return "", callbackErr
+	}
+	router, _, _ := newStreamingRouteTestServer(t, &config.Config{}, processor)
+	writer := &failAfterWritesResponseWriter{failAt: 2}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/chat/stream", strings.NewReader(`{"message":"hello"}`))
+	request.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(writer, request)
+	if callbackErr == nil || !errors.Is(callbackErr, io.ErrClosedPipe) {
+		t.Fatalf("delta callback error = %v, want disconnected writer error", callbackErr)
+	}
+	if strings.Contains(writer.body.String(), "event: done") || strings.Contains(writer.body.String(), "event: error") {
+		t.Fatalf("handler wrote a terminal event after disconnect: %q", writer.body.String())
+	}
+}
+
+type failAfterWritesResponseWriter struct {
+	header http.Header
+	body   strings.Builder
+	writes int
+	failAt int
+	status int
+}
+
+func (w *failAfterWritesResponseWriter) Header() http.Header {
+	if w.header == nil {
+		w.header = make(http.Header)
+	}
+	return w.header
+}
+
+func (w *failAfterWritesResponseWriter) WriteHeader(status int) { w.status = status }
+
+func (w *failAfterWritesResponseWriter) Write(data []byte) (int, error) {
+	w.writes++
+	if w.writes >= w.failAt {
+		return 0, io.ErrClosedPipe
+	}
+	return w.body.Write(data)
+}
+
+func (w *failAfterWritesResponseWriter) Flush() {}
+
+func sseDataForEvent(t *testing.T, body, event string) string {
+	t.Helper()
+	for _, frame := range strings.Split(body, "\n\n") {
+		if !strings.HasPrefix(frame, "event: "+event+"\n") {
+			continue
+		}
+		for _, line := range strings.Split(frame, "\n") {
+			if strings.HasPrefix(line, "data: ") {
+				return strings.TrimPrefix(line, "data: ")
+			}
+		}
+	}
+	t.Fatalf("SSE event %q missing from %q", event, body)
+	return ""
+}
+
+func TestAPIStreamSerializesRequestsForOneSession(t *testing.T) {
+	firstEntered := make(chan struct{})
+	secondEntered := make(chan struct{}, 1)
+	releaseFirst := make(chan struct{})
+	var calls atomic.Int32
+	processor := func(_ context.Context, _ *chat.Chat, _ string, _ *config.Config, _ func(string) error) (string, error) {
+		call := calls.Add(1)
+		if call == 1 {
+			close(firstEntered)
+			<-releaseFirst
+		} else {
+			secondEntered <- struct{}{}
+		}
+		return fmt.Sprintf("response %d", call), nil
+	}
+	router, _, _ := newStreamingRouteTestServer(t, &config.Config{}, processor)
+	firstDone := make(chan int, 1)
+	secondDone := make(chan int, 1)
+	go func() {
+		firstDone <- performJSONRequest(router, http.MethodPost, "/api/v1/chat/stream", ChatRequest{Message: "first"}).Code
+	}()
+	select {
+	case <-firstEntered:
+	case <-time.After(time.Second):
+		t.Fatal("first stream did not enter processor")
+	}
+	go func() {
+		secondDone <- performJSONRequest(router, http.MethodPost, "/api/v1/chat/stream", ChatRequest{Message: "second"}).Code
+	}()
+	select {
+	case <-secondEntered:
+		t.Fatal("second stream entered while the first still held the session lock")
+	case <-time.After(40 * time.Millisecond):
+	}
+	close(releaseFirst)
+	for name, done := range map[string]<-chan int{"first": firstDone, "second": secondDone} {
+		select {
+		case status := <-done:
+			if status != http.StatusOK {
+				t.Errorf("%s stream status = %d", name, status)
+			}
+		case <-time.After(time.Second):
+			t.Errorf("%s stream did not complete", name)
+		}
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("processor calls = %d, want 2 serialized streams", calls.Load())
+	}
 }
 
 func performJSONRequest(router http.Handler, method, path string, payload any) *httptest.ResponseRecorder {
