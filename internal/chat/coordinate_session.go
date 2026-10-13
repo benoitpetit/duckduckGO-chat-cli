@@ -150,11 +150,12 @@ func (c *Chat) CommitCoordinatedQuestion(question string, run *CoordinateRun) er
 	}
 	images := cloneImageAttachments(c.pendingImages)
 	c.Messages = append(c.Messages,
-		Message{Role: "user", Content: userContent, Images: images, Timestamp: time.Now()},
+		Message{Role: "user", Content: userContent, Images: images, Sources: cloneSourceRefs(c.PendingSources), Timestamp: time.Now()},
 		Message{Role: "assistant", Content: run.FinalAnswer, Timestamp: time.Now()},
 	)
 	run.committed = true
 	c.pendingImages = nil
+	c.PendingSources = nil
 	c.resetDurableConversation()
 	if c.Analytics != nil {
 		started := run.StartedAt

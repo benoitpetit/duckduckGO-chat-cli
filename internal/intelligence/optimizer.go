@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"duckduckgo-chat-cli/internal/chatcontext"
 	"duckduckgo-chat-cli/internal/media"
 )
 
@@ -27,6 +28,7 @@ type Message struct {
 	Content    string                  `json:"content"`
 	Role       string                  `json:"role"`
 	Images     []media.ImageAttachment `json:"images,omitempty"`
+	Sources    []chatcontext.SourceRef `json:"sources,omitempty"`
 	Timestamp  time.Time               `json:"timestamp"`
 	Sequence   int                     `json:"-"`
 	Importance float64                 `json:"importance"`

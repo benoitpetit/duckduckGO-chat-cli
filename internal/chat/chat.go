@@ -42,21 +42,22 @@ import (
 )
 
 type Chat struct {
-	Activity      *activity.Hub
-	Display       *ConversationView
-	OldVqd        string
-	NewVqd        string
-	VqdHash1      string // x-vqd-hash-1 header (full VQD hash)
-	FeSignals     string // x-fe-signals header
-	FeVersion     string // x-fe-version header
-	Model         models.Model
-	Messages      []Message
-	pendingImages []media.ImageAttachment
-	Client        *http.Client
-	BrowserRetry  BrowserRetryer
-	CookieJar     *cookiejar.Jar
-	LastHash      string
-	RetryCount    int
+	Activity       *activity.Hub
+	Display        *ConversationView
+	OldVqd         string
+	NewVqd         string
+	VqdHash1       string // x-vqd-hash-1 header (full VQD hash)
+	FeSignals      string // x-fe-signals header
+	FeVersion      string // x-fe-version header
+	Model          models.Model
+	Messages       []Message
+	PendingSources []chatcontext.SourceRef
+	pendingImages  []media.ImageAttachment
+	Client         *http.Client
+	BrowserRetry   BrowserRetryer
+	CookieJar      *cookiejar.Jar
+	LastHash       string
+	RetryCount     int
 
 	// New intelligent features
 	Analytics                  *analytics.ChatAnalytics
@@ -97,6 +98,7 @@ type Message struct {
 	Content                string                  `json:"content"`
 	Role                   string                  `json:"role"`
 	Images                 []media.ImageAttachment `json:"-"`
+	Sources                []chatcontext.SourceRef `json:"-"`
 	Timestamp              time.Time               `json:"-"`
 	forceTextContentBlocks bool                    // Duck.ai uses text blocks for later user turns in image chats.
 }
@@ -447,6 +449,7 @@ func (c *Chat) Clear(cfg *config.Config) error {
 	}
 	c.Messages = []Message{}
 	c.pendingImages = nil
+	c.PendingSources = nil
 	if c.Display != nil {
 		c.Display.Clear()
 	}
@@ -564,6 +567,39 @@ func (c *Chat) clearRequestCancel() {
 	}
 }
 
+// AddPendingSources associates source references with the next submitted user turn.
+func (c *Chat) AddPendingSources(sources []chatcontext.SourceRef) {
+	next := 1
+	for _, message := range c.Messages {
+		for _, source := range message.Sources {
+			if number, err := strconv.Atoi(strings.TrimPrefix(source.ID, "source-")); err == nil && number >= next {
+				next = number + 1
+			}
+		}
+	}
+	for _, source := range c.PendingSources {
+		if number, err := strconv.Atoi(strings.TrimPrefix(source.ID, "source-")); err == nil && number >= next {
+			next = number + 1
+		}
+	}
+	for _, source := range sources {
+		source.ID = fmt.Sprintf("source-%d", next)
+		if source.State == "" {
+			source.State = chatcontext.SourceStateActive
+		}
+		c.PendingSources = append(c.PendingSources, source)
+		next++
+	}
+}
+
+func (c *Chat) addPendingSource(source chatcontext.SourceRef) {
+	c.AddPendingSources([]chatcontext.SourceRef{source})
+}
+
+func cloneSourceRefs(sources []chatcontext.SourceRef) []chatcontext.SourceRef {
+	return append([]chatcontext.SourceRef(nil), sources...)
+}
+
 // QueueImageAttachments keeps local image attachments for the next prompt.
 func (c *Chat) QueueImageAttachments(images []media.ImageAttachment) {
 	c.pendingImages = append(c.pendingImages, cloneImageAttachments(images)...)
@@ -675,7 +711,9 @@ func processInputWithStreamFetcherAndTokenRoles(ctx context.Context, c *Chat, in
 
 	originalMessages := append([]Message(nil), c.Messages...)
 	originalPendingImages := c.pendingImages
+	originalPendingSources := cloneSourceRefs(c.PendingSources)
 	c.pendingImages = nil
+	c.PendingSources = nil
 	originalMessageCount := len(originalMessages)
 	isFirstMessage := originalMessageCount == 0
 	actualMessage := input
@@ -696,6 +734,7 @@ func processInputWithStreamFetcherAndTokenRoles(ctx context.Context, c *Chat, in
 		Role:      "user",
 		Content:   actualMessage,
 		Images:    originalPendingImages,
+		Sources:   cloneSourceRefs(originalPendingSources),
 		Timestamp: time.Now(),
 	})
 
@@ -740,6 +779,7 @@ func processInputWithStreamFetcherAndTokenRoles(ctx context.Context, c *Chat, in
 		}
 		c.Messages = originalMessages
 		c.pendingImages = originalPendingImages
+		c.PendingSources = originalPendingSources
 		if c.Analytics != nil {
 			duration := time.Since(startTime)
 			c.Analytics.RecordChatInteraction(duration, false, "unknown")
@@ -769,6 +809,7 @@ func processInputWithStreamFetcherAndTokenRoles(ctx context.Context, c *Chat, in
 		}
 		c.Messages = originalMessages
 		c.pendingImages = originalPendingImages
+		c.PendingSources = originalPendingSources
 		if c.Analytics != nil {
 			duration := time.Since(startTime)
 			c.Analytics.RecordChatInteraction(duration, false, "stream_error")
@@ -782,6 +823,7 @@ func processInputWithStreamFetcherAndTokenRoles(ctx context.Context, c *Chat, in
 		}
 		c.Messages = originalMessages
 		c.pendingImages = originalPendingImages
+		c.PendingSources = originalPendingSources
 		return "", err
 	}
 	if c.Activity != nil {
@@ -1829,6 +1871,7 @@ func (c *Chat) AddURLContext(url string) error {
 	}
 
 	message := fmt.Sprintf("[URL Context]\nURL: %s\n\n%s", url, content.Content)
+	c.addPendingSource(chatcontext.SourceRef{Kind: chatcontext.SourceKindURL, Name: url, URI: url, SizeBytes: len(content.Content), State: chatcontext.SourceStateActive})
 	c.Messages = append(c.Messages, Message{
 		Role:      "user",
 		Content:   message,
@@ -2076,6 +2119,7 @@ func (c *Chat) addURLContext(url string, content string) {
 	}
 
 	message := fmt.Sprintf("[URL Context]\nURL: %s\n\n%s", url, content)
+	c.addPendingSource(chatcontext.SourceRef{Kind: chatcontext.SourceKindURL, Name: url, URI: url, SizeBytes: len(content), State: chatcontext.SourceStateActive})
 	c.Messages = append(c.Messages, Message{
 		Role:      "user",
 		Content:   message,
@@ -2251,6 +2295,7 @@ func (c *Chat) recordContextMessage(content string) {
 
 // RestoreContext restores the chat context from a given conversation session.
 func (c *Chat) RestoreContext(session *persistence.ConversationSession) {
+	c.PendingSources = nil
 	// Saved CLI history is restored locally. Start a fresh Duck.ai durable
 	// conversation identity and send this transcript on the next chat request.
 	c.resetDurableConversation()
@@ -2269,6 +2314,7 @@ func (c *Chat) RestoreContext(session *persistence.ConversationSession) {
 			Content:   msg.Content,
 			Role:      msg.Role,
 			Images:    cloneImageAttachments(msg.Images),
+			Sources:   cloneSourceRefs(msg.Sources),
 			Timestamp: timestamp,
 		}
 	}
@@ -2288,6 +2334,7 @@ func (c *Chat) convertMessagesToIntelligence() []intelligence.Message {
 			Content:   msg.Content,
 			Role:      msg.Role,
 			Images:    cloneImageAttachments(msg.Images),
+			Sources:   cloneSourceRefs(msg.Sources),
 			Timestamp: msg.Timestamp,
 		}
 	}
@@ -2302,6 +2349,7 @@ func (c *Chat) convertFromIntelligenceMessages(messages []intelligence.Message) 
 			Content:   msg.Content,
 			Role:      msg.Role,
 			Images:    cloneImageAttachments(msg.Images),
+			Sources:   cloneSourceRefs(msg.Sources),
 			Timestamp: msg.Timestamp,
 		}
 	}

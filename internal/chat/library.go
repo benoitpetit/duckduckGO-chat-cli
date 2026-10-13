@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"duckduckgo-chat-cli/internal/chatcontext"
 	"duckduckgo-chat-cli/internal/config"
 	"duckduckgo-chat-cli/internal/ui"
 	"fmt"
@@ -441,7 +442,8 @@ func handleLibraryLoad(c *Chat, cfg *config.Config, argument string, userRequest
 			ui.Warningln("Skipping %s: library context limit of %d MiB reached", file, maxLibraryContextSize/(1<<20))
 			break
 		}
-		message := fmt.Sprintf("[File Context]\nFile: %s\n\n%s", file, string(content))
+		message := libraryContextMessage(file, content)
+		c.addPendingSource(librarySourceRef(file, content))
 		c.Messages = append(c.Messages, Message{
 			Role:      "user",
 			Content:   message,
@@ -527,4 +529,15 @@ func formatFileSize(size int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
+}
+
+func librarySourceRef(path string, content []byte) chatcontext.SourceRef {
+	return chatcontext.SourceRef{
+		Kind: chatcontext.SourceKindLibrary, Name: filepath.Base(path), URI: path,
+		SizeBytes: len(content), State: chatcontext.SourceStateActive,
+	}
+}
+
+func libraryContextMessage(path string, content []byte) string {
+	return fmt.Sprintf("[File Context]\nFile: %s\n\n%s", filepath.Base(path), string(content))
 }

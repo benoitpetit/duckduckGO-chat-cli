@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"duckduckgo-chat-cli/internal/analytics"
+	"duckduckgo-chat-cli/internal/chatcontext"
 	"duckduckgo-chat-cli/internal/config"
 	"duckduckgo-chat-cli/internal/media"
 	"duckduckgo-chat-cli/internal/models"
@@ -439,5 +440,22 @@ func TestCoordinatedQuestionRejectsUnsupportedModelForHistoricalImage(t *testing
 	}, nil)
 	if err == nil || !strings.Contains(err.Error(), "cannot receive images") || calls != 0 {
 		t.Fatalf("error=%v, calls=%d; historical image must not trigger silent model substitution", err, calls)
+	}
+}
+
+func TestCoordinateCommitConsumesPendingSourcesOnUserTurn(t *testing.T) {
+	c, _ := newCoordinateTestChat(t)
+	source := chatcontext.SourceRef{ID: "source-1", Kind: chatcontext.SourceKindFile, Name: "notes.txt", URI: "/private/notes.txt", SizeBytes: 16, State: chatcontext.SourceStateActive}
+	c.PendingSources = []chatcontext.SourceRef{source}
+	run := &CoordinateRun{Complete: true, UserContent: "Summarize notes", FinalAnswer: "Summary"}
+
+	if err := c.CommitCoordinatedQuestion("Summarize notes", run); err != nil {
+		t.Fatalf("CommitCoordinatedQuestion() error = %v", err)
+	}
+	if len(c.PendingSources) != 0 {
+		t.Fatalf("pending sources after commit = %+v, want consumed", c.PendingSources)
+	}
+	if len(c.Messages) != 2 || len(c.Messages[0].Sources) != 1 || c.Messages[0].Sources[0] != source || len(c.Messages[1].Sources) != 0 {
+		t.Fatalf("coordinate messages = %+v, want sources on user turn only", c.Messages)
 	}
 }

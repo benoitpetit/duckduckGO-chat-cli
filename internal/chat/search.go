@@ -53,8 +53,9 @@ func HandleSearchCommand(c *Chat, input string, cfg *config.Config, chainCtx *ch
 
 	contextMsg := formatSearchResults(results, cfg.Search.IncludeSnippet)
 
+	sources := searchSourceRefs(query, results)
 	if chainCtx != nil {
-		chainCtx.AddSearch(query, contextMsg)
+		chainCtx.AddSearch(query, contextMsg, sources...)
 		color.Green("Added %d search results to the chain context", len(results))
 	} else {
 		message := fmt.Sprintf("[Search Context]\n%s", contextMsg)
@@ -63,6 +64,7 @@ func HandleSearchCommand(c *Chat, input string, cfg *config.Config, chainCtx *ch
 			Content:   message,
 			Timestamp: time.Now(),
 		})
+		c.AddPendingSources(sources)
 		c.recordContextMessage(message)
 
 		if c.Analytics != nil {
@@ -168,6 +170,39 @@ func formatSearchResults(results []SearchResult, includeSnippet bool) string {
 		sb.WriteString("\n")
 	}
 	return strings.TrimSpace(sb.String())
+}
+
+func searchSourceRefs(query string, results []SearchResult) []chatcontext.SourceRef {
+	sources := make([]chatcontext.SourceRef, 0, len(results))
+	for _, result := range results {
+		uri := result.FormattedUrl
+		if uri == "" {
+			uri = result.HtmlFormattedUrl
+		}
+		name := result.Title
+		if name == "" {
+			name = result.HtmlTitle
+		}
+		if name == "" {
+			name = uri
+		}
+		size := len(result.Title) + len(result.FormattedUrl) + len(result.Snippet) +
+			len(result.HtmlTitle) + len(result.HtmlFormattedUrl) + len(result.HtmlSnippet)
+		if size == 0 {
+			size = len(query)
+		}
+		sources = append(sources, chatcontext.SourceRef{
+			Kind: chatcontext.SourceKindSearch, Name: name, URI: uri,
+			SizeBytes: size, State: chatcontext.SourceStateActive,
+		})
+	}
+	if len(sources) == 0 {
+		sources = append(sources, chatcontext.SourceRef{
+			Kind: chatcontext.SourceKindSearch, Name: query, SizeBytes: len(query),
+			State: chatcontext.SourceStateActive,
+		})
+	}
+	return sources
 }
 
 // --- Implémentation interne DuckDuckGo HTML ---

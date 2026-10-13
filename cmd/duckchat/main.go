@@ -1265,6 +1265,7 @@ func handleCommandChainWithRoleProcessor(chatSession *chat.Chat, cfg *config.Con
 
 	// We have context. Now check for a prompt.
 	contextContent := chainCtx.String()
+	chatSession.AddPendingSources(chainCtx.Sources())
 	if chainedCmd.Prompt != "" {
 		chatSession.QueueImageAttachments(chainCtx.ImageAttachments())
 		process(chatSession, contextContent, chainedCmd.Prompt, cfg)

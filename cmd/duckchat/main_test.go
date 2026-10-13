@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"duckduckgo-chat-cli/internal/chat"
+	"duckduckgo-chat-cli/internal/chatcontext"
 	"duckduckgo-chat-cli/internal/command"
 	"duckduckgo-chat-cli/internal/config"
 	"duckduckgo-chat-cli/internal/doctor"
@@ -240,6 +241,9 @@ func TestCommandChainAddsValidImageToProcessorContext(t *testing.T) {
 		Prompt:   "describe logo",
 	}, func(session *chat.Chat, prompt string, _ *config.Config) {
 		gotPrompt = prompt
+		if len(session.PendingSources) != 1 || session.PendingSources[0].Kind != chatcontext.SourceKindImage {
+			t.Errorf("pending image sources = %+v, want image provenance", session.PendingSources)
+		}
 	})
 	if !strings.Contains(gotPrompt, "describe logo") {
 		t.Fatalf("processor prompt = %q, want requested prompt", gotPrompt)
@@ -392,5 +396,53 @@ func TestDoctorIsListedInCLIHelp(t *testing.T) {
 		if !strings.Contains(output.String(), text) {
 			t.Errorf("CLI help omitted %q", text)
 		}
+	}
+}
+
+func TestCommandChainPassesSourceMetadataToSubmittedPrompt(t *testing.T) {
+	previousActivity := dashboardActivity
+	dashboardActivity = nil
+	t.Cleanup(func() { dashboardActivity = previousActivity })
+
+	path := filepath.Join(t.TempDir(), "notes.txt")
+	if err := os.WriteFile(path, []byte("project notes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	chatSession := &chat.Chat{}
+	var gotSources int
+	handleCommandChainWithRoleProcessor(chatSession, &config.Config{}, &command.ChainedCommand{
+		Commands: []*command.Command{{Type: "/file", Raw: "/file " + path}},
+		Prompt:   "summarize notes",
+	}, func(session *chat.Chat, _, _ string, _ *config.Config) {
+		gotSources = len(session.PendingSources)
+		if gotSources == 1 {
+			source := session.PendingSources[0]
+			if source.Name != "notes.txt" || source.URI != path {
+				t.Errorf("pending source = %+v, want file name and source URI", source)
+			}
+		}
+	})
+	if gotSources != 1 {
+		t.Fatalf("pending source count = %d, want one source for the chained file", gotSources)
+	}
+}
+
+func TestCommandChainKeepsSourceWhenPromptIsDeferred(t *testing.T) {
+	previousActivity := dashboardActivity
+	dashboardActivity = nil
+	t.Cleanup(func() { dashboardActivity = previousActivity })
+
+	path := filepath.Join(t.TempDir(), "notes.txt")
+	if err := os.WriteFile(path, []byte("project notes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	chatSession := &chat.Chat{}
+	handleCommandChainWithRoleProcessor(chatSession, &config.Config{}, &command.ChainedCommand{
+		Commands: []*command.Command{{Type: "/file", Raw: "/file " + path}},
+	}, func(*chat.Chat, string, string, *config.Config) {
+		t.Fatal("deferred prompt should not run")
+	})
+	if len(chatSession.PendingSources) != 1 || chatSession.PendingSources[0].Name != "notes.txt" {
+		t.Fatalf("deferred chain sources = %+v, want source retained until next turn", chatSession.PendingSources)
 	}
 }

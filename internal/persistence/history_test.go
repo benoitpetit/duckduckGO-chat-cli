@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"duckduckgo-chat-cli/internal/chatcontext"
 	"duckduckgo-chat-cli/internal/intelligence"
 	"duckduckgo-chat-cli/internal/media"
 )
@@ -175,5 +177,52 @@ func TestSaveSessionReplacesLegacyUncompressedArchive(t *testing.T) {
 	loaded, err := manager.LoadSession(updated.ID)
 	if err != nil || loaded.Messages[0].Content != "new" {
 		t.Fatalf("LoadSession() = (%+v, %v), want updated session", loaded, err)
+	}
+}
+
+func TestSessionRoundTripPreservesSourceReferences(t *testing.T) {
+	manager := NewHistoryManager(t.TempDir())
+	source := chatcontext.SourceRef{
+		ID: "source-1", Kind: chatcontext.SourceKindURL, Name: "Release notes",
+		URI: "https://example.test/releases", SizeBytes: 72, State: chatcontext.SourceStateActive,
+	}
+	session := &ConversationSession{
+		ID: "session_with_sources", StartTime: time.Now(), Model: "gpt-5.6-luna",
+		Messages: []intelligence.Message{{Role: "user", Content: "Summarize", Sources: []chatcontext.SourceRef{source}}},
+	}
+	if err := manager.SaveSession(session); err != nil {
+		t.Fatalf("SaveSession() error = %v", err)
+	}
+	loaded, err := manager.LoadSession(session.ID)
+	if err != nil {
+		t.Fatalf("LoadSession() error = %v", err)
+	}
+	if len(loaded.Messages) != 1 || !reflect.DeepEqual(loaded.Messages[0].Sources, []chatcontext.SourceRef{source}) {
+		t.Fatalf("loaded sources = %+v, want %+v", loaded.Messages, source)
+	}
+}
+
+func TestLegacySessionLoadsWithoutInventedSources(t *testing.T) {
+	dir := t.TempDir()
+	manager := NewHistoryManager(dir)
+	legacy := ConversationSession{
+		ID: "legacy_without_sources", StartTime: time.Now(), Model: "gpt-5.6-luna",
+		Messages: []intelligence.Message{{Role: "user", Content: "Older archive"}},
+	}
+	data, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "session_"+legacy.ID+".json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := manager.LoadSession(legacy.ID)
+	if err != nil {
+		t.Fatalf("LoadSession() error = %v", err)
+	}
+	if len(loaded.Messages) != 1 || len(loaded.Messages[0].Sources) != 0 {
+		t.Fatalf("legacy message sources = %+v, want no invented references", loaded.Messages)
 	}
 }

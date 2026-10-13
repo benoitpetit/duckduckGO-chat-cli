@@ -13,7 +13,9 @@ import (
 	"testing"
 
 	"duckduckgo-chat-cli/internal/analytics"
+	"duckduckgo-chat-cli/internal/chatcontext"
 	"duckduckgo-chat-cli/internal/config"
+	"duckduckgo-chat-cli/internal/intelligence"
 	"duckduckgo-chat-cli/internal/media"
 	"duckduckgo-chat-cli/internal/models"
 )
@@ -91,6 +93,9 @@ func TestImageFileContextQueuesImageForNextPrompt(t *testing.T) {
 	if len(c.Messages) != 0 {
 		t.Fatalf("queued image was inserted as a separate message: %+v", c.Messages)
 	}
+	if len(c.PendingSources) != 1 || c.PendingSources[0].Kind != chatcontext.SourceKindImage || c.PendingSources[0].Name != "logo.png" || c.PendingSources[0].URI != path {
+		t.Fatalf("pending image sources = %+v, want local image reference", c.PendingSources)
+	}
 }
 
 func TestImageFilePromptQueuesAttachmentWithPrompt(t *testing.T) {
@@ -125,6 +130,9 @@ func TestImageFilePromptQueuesAttachmentWithPrompt(t *testing.T) {
 	}
 	if message.Content != requested || len(message.Images) != 1 || message.Images[0].MIMEType != "image/webp" || !bytes.Equal(message.Images[0].Data, expected.Data) {
 		t.Fatalf("submitted user message = %+v, want prompt and image in one message", message)
+	}
+	if len(message.Sources) != 1 || message.Sources[0].Kind != chatcontext.SourceKindImage || message.Sources[0].Name != "logo.png" {
+		t.Fatalf("submitted image sources = %+v, want image reference on the prompt", message.Sources)
 	}
 	wireMessage, err := json.Marshal(message)
 	if err != nil {
@@ -236,5 +244,94 @@ func TestImageRequestsUseVisionCapableDuckAIModel(t *testing.T) {
 				t.Fatalf("selected model changed to %q after image request, want %q", c.Model, selectedModel)
 			}
 		})
+	}
+}
+
+func TestAddedFileRecordsPrivateURIAndShortDisplayName(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "private", "notes.txt")
+	content := []byte("project notes")
+	c := &Chat{}
+	c.addFileContext(path, content)
+
+	if len(c.PendingSources) != 1 {
+		t.Fatalf("pending sources = %+v, want one file source", c.PendingSources)
+	}
+	source := c.PendingSources[0]
+	if source.Kind != chatcontext.SourceKindFile || source.Name != "notes.txt" || source.URI != path || source.SizeBytes != len(content) || source.State != chatcontext.SourceStateActive {
+		t.Fatalf("file source = %+v, want short name and full internal URI", source)
+	}
+}
+
+func TestPendingSourcesRestoreAfterFailedInputAndConsumeOnSuccessfulTurn(t *testing.T) {
+	source := chatcontext.SourceRef{ID: "source-1", Kind: chatcontext.SourceKindFile, Name: "notes.txt", URI: "/private/notes.txt", SizeBytes: 12, State: chatcontext.SourceStateActive}
+	c := &Chat{PendingSources: []chatcontext.SourceRef{source}}
+	render := func(stream <-chan string) string {
+		for range stream {
+		}
+		return "answer"
+	}
+
+	_, err := processInputWithFetcher(context.Background(), c, "retry me", &config.Config{}, render, func(context.Context, string) (<-chan string, error) {
+		return nil, errors.New("temporary failure")
+	})
+	if err == nil {
+		t.Fatal("failed input unexpectedly succeeded")
+	}
+	if len(c.PendingSources) != 1 || c.PendingSources[0].ID != source.ID || len(c.Messages) != 0 {
+		t.Fatalf("failed input did not restore pending sources: pending=%+v messages=%+v", c.PendingSources, c.Messages)
+	}
+
+	_, err = processInputWithFetcher(context.Background(), c, "retry me", &config.Config{}, render, func(context.Context, string) (<-chan string, error) {
+		stream := make(chan string, 1)
+		stream <- "answer"
+		close(stream)
+		return stream, nil
+	})
+	if err != nil {
+		t.Fatalf("successful retry error = %v", err)
+	}
+	if len(c.PendingSources) != 0 {
+		t.Fatalf("successful turn left pending sources: %+v", c.PendingSources)
+	}
+	if len(c.Messages) != 2 || len(c.Messages[0].Sources) != 1 || c.Messages[0].Sources[0] != source || len(c.Messages[1].Sources) != 0 {
+		t.Fatalf("committed messages = %+v, want source on user turn only", c.Messages)
+	}
+}
+
+func TestSourceMetadataSurvivesOptimizerConversionButStaysOffWire(t *testing.T) {
+	source := chatcontext.SourceRef{ID: "source-1", Kind: chatcontext.SourceKindURL, Name: "Guide", URI: "https://example.test", SizeBytes: 40, State: chatcontext.SourceStateActive}
+	c := &Chat{Messages: []Message{{Role: "user", Content: "Summarize this", Sources: []chatcontext.SourceRef{source}}}}
+
+	converted := c.convertMessagesToIntelligence()
+	if len(converted) != 1 || len(converted[0].Sources) != 1 || converted[0].Sources[0] != source {
+		t.Fatalf("optimizer conversion lost sources: %+v", converted)
+	}
+	optimizer := intelligence.NewContextOptimizer()
+	optimizer.MaxContextSize = 10000
+	optimized, _ := optimizer.OptimizeContext(converted)
+	restored := c.convertFromIntelligenceMessages(optimized)
+	if len(restored) != 1 || len(restored[0].Sources) != 1 || restored[0].Sources[0] != source {
+		t.Fatalf("optimized conversion lost sources: %+v", restored)
+	}
+
+	wire, err := json.Marshal(c.Messages[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(wire, []byte("sources")) || bytes.Contains(wire, []byte("example.test")) {
+		t.Fatalf("internal source metadata entered the Duck.ai wire message: %s", wire)
+	}
+}
+
+func TestAddedURLRecordsSourceForNextTurn(t *testing.T) {
+	c := &Chat{}
+	c.addURLContext("https://example.test/guide", "page text")
+
+	if len(c.PendingSources) != 1 {
+		t.Fatalf("pending sources = %+v, want one URL reference", c.PendingSources)
+	}
+	source := c.PendingSources[0]
+	if source.Kind != chatcontext.SourceKindURL || source.Name != "https://example.test/guide" || source.URI != source.Name || source.SizeBytes != len("page text") {
+		t.Fatalf("URL source = %+v", source)
 	}
 }

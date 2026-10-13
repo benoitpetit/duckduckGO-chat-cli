@@ -69,6 +69,7 @@ func handleFileCommand(c *Chat, input string, cfg *config.Config, chainCtx *chat
 		}
 
 		c.QueueImageAttachments([]media.ImageAttachment{image})
+		c.addPendingSource(chatcontext.SourceRef{Kind: chatcontext.SourceKindImage, Name: image.Name, URI: path, SizeBytes: len(image.Data), State: chatcontext.SourceStateActive})
 		if c.Analytics != nil {
 			c.Analytics.RecordFileProcessed()
 		}
@@ -144,6 +145,7 @@ func (c *Chat) addFileContext(path string, content []byte) {
 	}
 
 	message := fmt.Sprintf("[File Context]\nFile: %s\n\n%s", filepath.Base(path), string(content))
+	c.addPendingSource(chatcontext.SourceRef{Kind: chatcontext.SourceKindFile, Name: filepath.Base(path), URI: path, SizeBytes: len(content), State: chatcontext.SourceStateActive})
 	c.Messages = append(c.Messages, Message{
 		Role:      "user",
 		Content:   message,
