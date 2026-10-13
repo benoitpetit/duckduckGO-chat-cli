@@ -120,6 +120,7 @@ These slash commands are typed at the `You:` prompt after the interactive chat s
 | `/clear`              | Start a fresh chat and Duck.ai session                    |
 | `/stats`              | View current session statistics                           |
 | `/history`            | Browse saved conversations                                |
+| `/sessions [query]`   | Search, organize, restore, and remove saved sessions       |
 | `/load [session_id]`  | Restore a saved conversation                              |
 | `/speak`              | Start or restore a voice conversation                     |
 | `/image [idea]`       | Generate an image, with an optional guided prompt flow    |
@@ -189,7 +190,7 @@ Duck.ai's native web search and image generation can be enabled under **Duck.ai 
 
 ## Local usage dashboard
 
-The optional dashboard listens on `127.0.0.1` and shows local usage, recent CLI activity, and conversation history when enabled. Start or open it with `/dashboard on` or `/dashboard open`; use `/dashboard status` to check it and `/dashboard off` to stop it. Dashboard privacy, retention, and password settings are available in `/config`.
+The optional dashboard listens on `127.0.0.1` and shows local usage, recent CLI activity, and conversation history when enabled. Its conversation page can search, rename, tag, favorite, and delete saved sessions; delete asks for confirmation. Start or open it with `/dashboard on` or `/dashboard open`; use `/dashboard status` to check it and `/dashboard off` to stop it. Conversation controls appear only when **Show Conversations** is enabled. Dashboard privacy, retention, and password settings are available in `/config`.
 
 When enabled, the optional HTTP API binds to the local machine by default. Enable it in `/config`, then use `/api` to start or stop it. See the [API reference](docs/README.md) for the specification.
 

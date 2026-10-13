@@ -54,6 +54,7 @@ Type `/help` in the CLI for the current command list.
 | `/export` | Save conversation content to a file |
 | `/file <path> [-- prompt]` | Add a file to chat context or ask about it directly |
 | `/history` | Search and browse saved conversations |
+| `/sessions [query]` | Find, organize, restore, or delete saved sessions |
 | `/image [idea]` | Generate an image, with an optional guided prompt flow |
 | `/issue` | Fill in a report and open a prefilled GitHub issue |
 | `/library [command] [args] [-- prompt]` | Manage local file libraries and use their content |
@@ -69,6 +70,18 @@ Type `/help` in the CLI for the current command list.
 | `/api [port]` | Start or stop the local HTTP API |
 
 `/context` groups retained sources by type and shows whether optimization compressed, truncated, or omitted any content. `/sources` lists the references that remain in the request context for the latest exchange. Token counts are approximate, estimated as one token per four source bytes. When source metadata exists, the prompt includes numbered labels such as `[1] source-1 · file · notes.md`; these identify supplied context and are not verified citations. Labels and default panels use short local file names and do not reveal local paths. Markdown conversation exports include source URIs, which can contain full local paths.
+
+### Manage saved sessions
+
+`/history` shows the current chat transcript. Use `/sessions` to manage saved conversation archives. An optional query filters by title, tag, model, session ID, or the first user message:
+
+```text
+/sessions release
+```
+
+Choose a session to open it, rename it, replace its comma-separated tags, toggle its favorite status, or delete it. Titles allow up to 100 characters; each of at most 10 tags allows 24. Leaving a tag list empty clears it. Delete displays the selected title and ID and requires a separate confirmation before removing that archive.
+
+The dashboard offers the same rename, tag, favorite, and delete controls on its Conversations page. It shows that page only when **Show Conversations** is enabled in `/config` under **Dashboard Settings**; a configured dashboard password also protects these actions. Dashboard deletion likewise asks for confirmation. Session metadata stays in the local archive, and the existing retention policy still removes old sessions automatically.
 
 ### Add context to a message
 
