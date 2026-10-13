@@ -33,6 +33,7 @@ type ConversationSession struct {
 	Title             string                 `json:"title,omitempty"`
 	Tags              []string               `json:"tags"`
 	Favorite          bool                   `json:"favorite,omitempty"`
+	CoordinateReports []CoordinateReport     `json:"coordinate_reports,omitempty"`
 	Compressed        bool                   `json:"compressed"`
 	Version           string                 `json:"version"`
 }
@@ -90,6 +91,9 @@ func (hm *HistoryManager) SetRetentionDays(days int) error {
 func (hm *HistoryManager) SaveSession(session *ConversationSession) error {
 	if session == nil || !storageSessionIDPattern.MatchString(session.ID) {
 		return fmt.Errorf("invalid session id")
+	}
+	if err := validateCoordinateReports(session.CoordinateReports); err != nil {
+		return err
 	}
 	metadata, err := validateSessionMetadata(SessionMetadata{Title: session.Title, Tags: session.Tags, Favorite: session.Favorite})
 	if err != nil {
@@ -599,6 +603,9 @@ func (hm *HistoryManager) loadCompressed(filePath string) (*ConversationSession,
 	if err := decoder.Decode(&session); err != nil {
 		return nil, err
 	}
+	if err := validateCoordinateReports(session.CoordinateReports); err != nil {
+		return nil, err
+	}
 	normalizeLoadedSessionMetadata(&session)
 
 	return &session, nil
@@ -615,6 +622,9 @@ func (hm *HistoryManager) loadUncompressed(filePath string) (*ConversationSessio
 	decoder := json.NewDecoder(file)
 
 	if err := decoder.Decode(&session); err != nil {
+		return nil, err
+	}
+	if err := validateCoordinateReports(session.CoordinateReports); err != nil {
 		return nil, err
 	}
 	normalizeLoadedSessionMetadata(&session)

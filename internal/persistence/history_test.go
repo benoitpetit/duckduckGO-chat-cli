@@ -243,6 +243,128 @@ func TestDeleteSessionRemovesUncompressedLegacyArchive(t *testing.T) {
 	}
 }
 
+func TestCoordinateReportRoundTripKeepsStageOrder(t *testing.T) {
+	manager := NewHistoryManager(t.TempDir())
+	session := &ConversationSession{
+		ID: "session_coordinate_report", StartTime: time.Now(),
+		Messages: []intelligence.Message{{Role: "user", Content: "Question"}, {Role: "assistant", Content: "Final answer"}},
+		CoordinateReports: []CoordinateReport{{
+			ID: "coordinate_123456789", Strategy: "independent", Question: "Question",
+			StartedAt: time.Now().Add(-time.Minute), FinishedAt: time.Now(), Complete: true, FinalAnswer: "Final answer",
+			Stages: []CoordinateReportStage{
+				{ID: "agent-1", Label: "Agent 1", Model: "model-a", Role: "Analyst", Status: "completed", Attempt: 1, Prompt: "first prompt", Response: "first output"},
+				{ID: "agent-2", Label: "Agent 2", Model: "model-b", Role: "Verifier", Status: "completed", Attempt: 1, Prompt: "second prompt", Response: "second output"},
+			},
+		}, {
+			ID: "coordinate_223456789", Strategy: "debate", Question: "Question",
+			StartedAt: time.Now().Add(-time.Minute), FinishedAt: time.Now(), Partial: true, FinalAnswer: "Partial answer",
+			Stages: []CoordinateReportStage{{ID: "agent-3", Label: "Synthesis", Status: "failed", Error: "temporary failure"}},
+		}},
+	}
+	if err := manager.SaveSession(session); err != nil {
+		t.Fatalf("SaveSession() error = %v", err)
+	}
+	loaded, err := manager.LoadSession(session.ID)
+	if err != nil {
+		t.Fatalf("LoadSession() error = %v", err)
+	}
+	if len(loaded.CoordinateReports) != 2 || loaded.CoordinateReports[0].ID != "coordinate_123456789" || !loaded.CoordinateReports[0].Complete || !loaded.CoordinateReports[1].Partial {
+		t.Fatalf("loaded coordinate report = %+v", loaded.CoordinateReports)
+	}
+	stages := loaded.CoordinateReports[0].Stages
+	if len(stages) != 2 || stages[0].ID != "agent-1" || stages[1].ID != "agent-2" || stages[0].Response != "first output" {
+		t.Fatalf("coordinate stage order/content = %+v", stages)
+	}
+	entries, err := os.ReadDir(manager.StorageDir)
+	if err != nil || len(entries) != 1 || !strings.HasSuffix(entries[0].Name(), ".json.gz") {
+		t.Fatalf("report should live inside the compressed session archive; entries=%v err=%v", entries, err)
+	}
+}
+
+func TestLegacySessionLoadsWithoutCoordinateReports(t *testing.T) {
+	dir := t.TempDir()
+	manager := NewHistoryManager(dir)
+	path := filepath.Join(dir, "session_legacy_coordinate.json")
+	if err := os.WriteFile(path, []byte(`{"id":"legacy_coordinate","start_time":"2026-01-01T00:00:00Z","model":"model","messages":[],"analytics":{}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := manager.LoadSession("legacy_coordinate")
+	if err != nil {
+		t.Fatalf("LoadSession() error = %v", err)
+	}
+	if len(loaded.CoordinateReports) != 0 {
+		t.Fatalf("legacy coordinate reports = %+v, want empty", loaded.CoordinateReports)
+	}
+}
+
+func TestSaveSessionValidatesCoordinateReportIDsAndTextLimits(t *testing.T) {
+	tests := []struct {
+		name   string
+		report CoordinateReport
+	}{
+		{
+			name:   "path traversal id",
+			report: CoordinateReport{ID: "../outside", Strategy: "independent", Question: "Q", Complete: true, Stages: []CoordinateReportStage{{ID: "agent-1", Status: "completed"}}},
+		},
+		{
+			name:   "path traversal stage id",
+			report: CoordinateReport{ID: "coordinate_9", Strategy: "independent", Question: "Q", Complete: true, Stages: []CoordinateReportStage{{ID: "../outside", Status: "completed"}}},
+		},
+		{
+			name:   "oversized prompt",
+			report: CoordinateReport{ID: "coordinate_1", Strategy: "independent", Question: "Q", Complete: true, Stages: []CoordinateReportStage{{ID: "agent-1", Status: "completed", Prompt: strings.Repeat("x", CoordinateReportTextLimit+1)}}},
+		},
+		{
+			name:   "oversized response",
+			report: CoordinateReport{ID: "coordinate_2", Strategy: "independent", Question: "Q", Complete: true, Stages: []CoordinateReportStage{{ID: "agent-1", Status: "completed", Response: strings.Repeat("x", CoordinateReportTextLimit+1)}}},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manager := NewHistoryManager(t.TempDir())
+			session := &ConversationSession{ID: "session_invalid_report", StartTime: time.Now(), CoordinateReports: []CoordinateReport{test.report}}
+			if err := manager.SaveSession(session); err == nil {
+				t.Fatal("SaveSession() succeeded for an invalid coordinate report")
+			}
+		})
+	}
+}
+
+func TestDeleteSessionRemovesCoordinateReports(t *testing.T) {
+	manager := NewHistoryManager(t.TempDir())
+	session := &ConversationSession{
+		ID: "session_delete_report", StartTime: time.Now(), Messages: []intelligence.Message{{Role: "user", Content: "question"}},
+		CoordinateReports: []CoordinateReport{{ID: "coordinate_2", Strategy: "independent", Question: "question", Complete: true, FinalAnswer: "done", Stages: []CoordinateReportStage{{ID: "synthesis", Status: "completed"}}}},
+	}
+	if err := manager.SaveSession(session); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.DeleteSession(session.ID); err != nil {
+		t.Fatalf("DeleteSession() error = %v", err)
+	}
+	if _, err := manager.LoadSession(session.ID); err == nil {
+		t.Fatal("deleted conversation and its inline coordinate report remained loadable")
+	}
+}
+
+func TestRetentionRemovesConversationWithCoordinateReports(t *testing.T) {
+	manager := NewHistoryManager(t.TempDir())
+	session := &ConversationSession{
+		ID: "session_expired_report", StartTime: time.Now().Add(-60 * 24 * time.Hour),
+		Messages:          []intelligence.Message{{Role: "user", Content: "question"}},
+		CoordinateReports: []CoordinateReport{{ID: "coordinate_3", Strategy: "independent", Question: "question", Complete: true, FinalAnswer: "done", Stages: []CoordinateReportStage{{ID: "synthesis", Status: "completed"}}}},
+	}
+	if err := manager.SaveSession(session); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.SetRetentionDays(30); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.LoadSession(session.ID); err == nil {
+		t.Fatal("expired conversation and its inline coordinate report remained loadable")
+	}
+}
+
 func TestDeleteSessionReportsPartialRemovalFailure(t *testing.T) {
 	dir := t.TempDir()
 	manager := NewHistoryManager(dir)
