@@ -1380,9 +1380,25 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, cmd *command.Comm
 		})
 	case cmd.Type == "/config":
 		previousTrayConfig := cfg.Tray
+		resetApplied := false
 		withResizeRedrawSuspended(chatSession, func() {
-			config.HandleConfiguration(cfg, chatSession)
+			resetApplied = config.HandleConfiguration(cfg, chatSession)
 		})
+		if resetApplied {
+			if api.IsRunning() {
+				api.StopServer()
+				ui.AIln("API server stopped after the configuration reset.")
+			}
+			if dashboardServer != nil {
+				if running, _ := dashboardServer.Status(); running {
+					handleDashboardCommand("off")
+				}
+			}
+			if chatSession.Display != nil {
+				chatSession.Display.SetHeader("DuckDuckGo AI Chat CLI · " + models.DisplayName(chatSession.Model))
+				chatSession.Display.SetFramed(cfg.Appearance.FrameResponses)
+			}
+		}
 		refreshDashboardSettings(cfg)
 		if cfg.Tray != previousTrayConfig {
 			if response, err := tray.Send(context.Background(), tray.ActionReloadConfig); err != nil || response.Error != "" {

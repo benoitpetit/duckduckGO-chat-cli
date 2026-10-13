@@ -185,7 +185,7 @@ Choose a model with `/model`, or pass its ID with `--model` in one-shot mode. Du
 
 ## Configuration
 
-Open `/config` to choose a default model, color theme, response frame, export folder, global prompt, search behavior, library folders, voice window size, and other options. Changes are saved as you make them. Themes include `official`, `retro`, `mono`, `dracula`, and `nord`.
+Open `/config` to choose a default model, color theme, response frame, export folder, global prompt, search behavior, library folders, voice window size, and other options. Changes are saved as you make them. Themes include `official`, `retro`, `mono`, `dracula`, and `nord`. **Reset all settings to defaults** restores the full configuration after a default-No confirmation and typing `RESET`. It clears saved credentials and custom prompts/profiles, stops active API and dashboard services, and reapplies the default 90-day history retention; older history entries may be removed. Exported files are not deleted, and terms must be accepted again on the next launch.
 
 Duck.ai's native web search and image generation can be enabled under **Duck.ai Native Tools**. `/search` remains a separate command that explicitly searches the web and adds results to the conversation. The `/image` command temporarily enables image generation for that request.
 

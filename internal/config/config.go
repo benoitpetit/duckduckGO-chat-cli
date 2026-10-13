@@ -294,14 +294,105 @@ func defaultConfig() *Config {
 		LastUpdateTime:   time.Now(),
 		Appearance:       AppearanceConfig{Theme: string(ui.ThemeOfficial), FrameResponses: true},
 		ConfirmLongInput: true, // default to enabled for safety
-		Search:           SearchConfig{IncludeSnippet: true},
-		Library:          LibraryConfig{Enabled: true},
-		Speak:            SpeakConfig{},
+		Search:           SearchConfig{MaxResults: 10, IncludeSnippet: true, MaxRetries: 3, RetryDelay: 1},
+		Library:          LibraryConfig{Directories: []string{}, Enabled: true},
+		API:              APIConfig{Host: "127.0.0.1", Port: 8080},
+		Speak:            defaultSpeakConfig(),
 		Tray:             defaultTrayConfig(),
 		RateLimit:        defaultRateLimitConfig(),
 		Dashboard:        defaultDashboardConfig(),
 		Prompts:          make(map[string]string),
 	}
+}
+
+func resetConfigurationToDefaults(cfg *Config, chatSession interfaces.ChatSession) error {
+	if cfg == nil {
+		return fmt.Errorf("configuration is unavailable")
+	}
+	defaults := defaultConfig()
+	// A brand-new install enables these diagnostic logs. Keep explicit false
+	// values in existing configuration files unchanged during normal loading.
+	defaults.API.LogRequests = true
+	defaults.API.ShowGinLogs = true
+	if err := SaveConfig(defaults); err != nil {
+		return fmt.Errorf("could not save default configuration: %w", err)
+	}
+
+	*cfg = *defaults
+	ui.SetTheme(cfg.Appearance.Theme)
+	if chatSession != nil {
+		chatSession.ChangeModel(models.GetModel(cfg.DefaultModel))
+		chatSession.SetNativeTools(cfg.Tools.Enabled, cfg.Tools.WebSearch, cfg.Tools.ImageGeneration)
+	}
+	ui.AIln("All DuckChat settings have been reset to their defaults.")
+	return nil
+}
+
+const (
+	configResetConfirmationPhrase = "RESET"
+	configResetConfirmationHelp   = "This clears the local API key, dashboard password, saved prompts, coordinate profiles, and terms acceptance. API and dashboard services stop. Session and dashboard-history retention returns to 90 days, so older records may be removed. Exported files are not deleted."
+)
+
+type configResetPrompter interface {
+	ConfirmReset(message, help string, defaultAnswer bool) (bool, error)
+	EnterResetPhrase(expected string) (string, error)
+}
+
+type terminalConfigResetPrompter struct{}
+
+func (terminalConfigResetPrompter) ConfirmReset(message, help string, defaultAnswer bool) (bool, error) {
+	var confirmed bool
+	prompt := &survey.Confirm{Message: message, Help: help, Default: defaultAnswer}
+	if err := survey.AskOne(prompt, &confirmed); err != nil {
+		return false, err
+	}
+	return confirmed, nil
+}
+
+func (terminalConfigResetPrompter) EnterResetPhrase(expected string) (string, error) {
+	var answer string
+	prompt := &survey.Input{Message: fmt.Sprintf("Type %q exactly to continue:", expected)}
+	validate := func(value interface{}) error {
+		phrase, ok := value.(string)
+		if !ok || phrase != expected {
+			return fmt.Errorf("type %q exactly to confirm the reset", expected)
+		}
+		return nil
+	}
+	if err := survey.AskOne(prompt, &answer, survey.WithValidator(validate)); err != nil {
+		return "", err
+	}
+	return answer, nil
+}
+
+func resetConfigurationWithConfirmation(cfg *Config, chatSession interfaces.ChatSession, prompts configResetPrompter) bool {
+	if prompts == nil {
+		ui.Errorln("Configuration reset prompt is unavailable.")
+		return false
+	}
+	confirmed, err := prompts.ConfirmReset("Reset all DuckChat settings?", configResetConfirmationHelp, false)
+	if err != nil {
+		ui.Warningln("Configuration reset canceled; no settings were changed.")
+		return false
+	}
+	if !confirmed {
+		ui.AIln("Configuration reset canceled; no settings were changed.")
+		return false
+	}
+	phrase, err := prompts.EnterResetPhrase(configResetConfirmationPhrase)
+	if err != nil {
+		ui.Warningln("Configuration reset canceled; no settings were changed.")
+		return false
+	}
+	if phrase != configResetConfirmationPhrase {
+		ui.Warningln("Reset confirmation did not match; no settings were changed.")
+		return false
+	}
+	if err := resetConfigurationToDefaults(cfg, chatSession); err != nil {
+		ui.Errorln("Configuration reset failed: %v", err)
+		return false
+	}
+	return true
 }
 
 func loadConfig() *Config {
@@ -444,7 +535,8 @@ func AcceptTermsOfService(cfg *Config, askOptions ...survey.AskOpt) bool {
 	return accepted
 }
 
-func HandleConfiguration(cfg *Config, chatSession interfaces.ChatSession) {
+func HandleConfiguration(cfg *Config, chatSession interfaces.ChatSession) bool {
+	resetApplied := false
 	for {
 		frameStatus := "Off"
 		if cfg.Appearance.FrameResponses {
@@ -481,13 +573,14 @@ func HandleConfiguration(cfg *Config, chatSession interfaces.ChatSession) {
 				"Services · Dashboard settings",
 				"Services · Audio agent speak",
 				"Files · Export directory",
+				"Reset all settings to defaults",
 				"Back to chat",
 			},
 			Default: "Back to chat",
 		}
 		if err := askFramedConfigChoice(prompt, &choice, summary); err != nil {
 			ui.Warningln("Configuration menu canceled.")
-			return
+			return resetApplied
 		}
 
 		switch choice {
@@ -521,8 +614,12 @@ func HandleConfiguration(cfg *Config, chatSession interfaces.ChatSession) {
 			handleSpeakSettings(cfg)
 		case "Prompts · Prompt management":
 			HandlePromptManagement(cfg)
+		case "Reset all settings to defaults":
+			if resetConfigurationWithConfirmation(cfg, chatSession, terminalConfigResetPrompter{}) {
+				resetApplied = true
+			}
 		case "Back to chat", "":
-			return
+			return resetApplied
 		default:
 			ui.Errorln("Invalid choice. Please try again.")
 		}

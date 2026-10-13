@@ -155,6 +155,8 @@ The CLI accepts shorter aliases for some models. `/model` shows the names you ca
 
 Open `/config` to change settings. Changes are saved as you make them. The menu groups settings by area and supports arrow-key navigation, Enter to select, and typing to filter.
 
+Choose **Reset all settings to defaults** at the bottom of the menu to replace the complete configuration file with built-in defaults. The confirmation defaults to **No** and requires typing `RESET`. This clears the API key, dashboard password, saved prompts, coordinate presets, and terms acceptance; it also stops active API/dashboard services. The default 90-day retention is reapplied immediately, so older saved conversations and dashboard history may be removed. Exported files are not deleted, and the terms prompt appears again on the next launch.
+
 Appearance options include the `official`, `retro`, `mono`, `dracula`, and `nord` themes, plus framed model responses. You can also set the default model, export folder, global prompt, saved prompts, search behavior, library folders, tray shortcuts, voice window size, dashboard, and API options.
 
 ## Search, files, and images
