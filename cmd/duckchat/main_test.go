@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
 	"image"
 	"image/png"
 	"math"
@@ -15,6 +18,7 @@ import (
 	"duckduckgo-chat-cli/internal/chat"
 	"duckduckgo-chat-cli/internal/command"
 	"duckduckgo-chat-cli/internal/config"
+	"duckduckgo-chat-cli/internal/doctor"
 	"duckduckgo-chat-cli/internal/ui"
 	"duckduckgo-chat-cli/internal/update"
 
@@ -260,5 +264,133 @@ func TestCommandChainPassesContextAndPromptAsSeparateAnalyticsRoles(t *testing.T
 	})
 	if !strings.Contains(gotContext, "project notes for the report") || gotPrompt != "summarize these notes" {
 		t.Fatalf("processor context=%q prompt=%q, want separate file context and user prompt", gotContext, gotPrompt)
+	}
+}
+
+func doctorTestDependencies(t *testing.T, accepted bool) doctor.Dependencies {
+	t.Helper()
+	root := t.TempDir()
+	configPath := filepath.Join(root, "config.json")
+	if err := os.WriteFile(configPath, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	exportDir := filepath.Join(root, "exports")
+	if err := os.Mkdir(exportDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return doctor.Dependencies{
+		ReadConfig: func() (config.Config, string, error) {
+			return config.Config{TOSAccepted: accepted, ExportDir: exportDir}, configPath, nil
+		},
+		BrowserPath: func() (string, error) { return "/usr/bin/chromium", nil },
+		BrowserVersion: func(context.Context, string) (string, error) {
+			return "Chromium 130.0.0.0", nil
+		},
+		NetworkProbe: func(context.Context) error { return nil },
+	}
+}
+
+func TestDoctorLocalInvocationSkipsNetwork(t *testing.T) {
+	deps := doctorTestDependencies(t, true)
+	called := false
+	deps.NetworkProbe = func(context.Context) error {
+		called = true
+		return nil
+	}
+	var stdout, stderr bytes.Buffer
+
+	code := runDoctorWithDependencies(nil, &stdout, &stderr, deps)
+	if code != 0 {
+		t.Fatalf("runDoctorWithDependencies() = %d, want 0; stderr: %s", code, stderr.String())
+	}
+	if called {
+		t.Fatal("local invocation called the network probe")
+	}
+	if !strings.Contains(stdout.String(), "network [skipped]") {
+		t.Fatalf("human output omitted skipped network check: %s", stdout.String())
+	}
+}
+
+func TestDoctorNetworkFlagRunsProbe(t *testing.T) {
+	deps := doctorTestDependencies(t, true)
+	called := false
+	deps.NetworkProbe = func(ctx context.Context) error {
+		called = true
+		if _, ok := ctx.Deadline(); !ok {
+			t.Error("network probe has no deadline")
+		}
+		return nil
+	}
+	var stdout, stderr bytes.Buffer
+
+	code := runDoctorWithDependencies([]string{"--network"}, &stdout, &stderr, deps)
+	if code != 0 || !called {
+		t.Fatalf("runDoctorWithDependencies() = %d, called %v; want 0 and a probe; stderr: %s", code, called, stderr.String())
+	}
+}
+
+func TestDoctorJSONHasStableChecks(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runDoctorWithDependencies([]string{"--json"}, &stdout, &stderr, doctorTestDependencies(t, true))
+	if code != 0 {
+		t.Fatalf("runDoctorWithDependencies() = %d; stderr: %s", code, stderr.String())
+	}
+	var result doctor.Result
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("JSON output is invalid: %v: %s", err, stdout.String())
+	}
+	ids := make([]string, len(result.Checks))
+	for i, check := range result.Checks {
+		ids[i] = check.ID
+	}
+	if got, want := strings.Join(ids, ","), "platform,config_file,terms,browser,browser_version,export_directory,network"; got != want {
+		t.Fatalf("JSON check order = %q, want %q", got, want)
+	}
+}
+
+func TestDoctorRejectsUnknownFlags(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runDoctorWithDependencies([]string{"--unknown"}, &stdout, &stderr, doctorTestDependencies(t, true))
+	if code != 2 {
+		t.Fatalf("runDoctorWithDependencies() = %d, want 2", code)
+	}
+	if !strings.Contains(stderr.String(), "unknown") {
+		t.Fatalf("unknown flag error missing from stderr: %s", stderr.String())
+	}
+}
+
+func TestDoctorReturnsNonZeroForRequiredFailure(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runDoctorWithDependencies(nil, &stdout, &stderr, doctorTestDependencies(t, false))
+	if code != 1 {
+		t.Fatalf("runDoctorWithDependencies() = %d, want 1", code)
+	}
+}
+
+func TestDoctorOutputRedactsSensitiveProbeErrors(t *testing.T) {
+	for _, args := range [][]string{{"--network"}, {"--network", "--json"}} {
+		t.Run(strings.Join(args, "_"), func(t *testing.T) {
+			deps := doctorTestDependencies(t, true)
+			deps.NetworkProbe = func(context.Context) error {
+				return errors.New("captured cookie=private-cookie VQD=private-vqd")
+			}
+			var stdout, stderr bytes.Buffer
+			runDoctorWithDependencies(args, &stdout, &stderr, deps)
+			for _, secret := range []string{"private-cookie", "private-vqd"} {
+				if strings.Contains(stdout.String(), secret) || strings.Contains(stderr.String(), secret) {
+					t.Fatalf("diagnostic output leaked %q", secret)
+				}
+			}
+		})
+	}
+}
+
+func TestDoctorIsListedInCLIHelp(t *testing.T) {
+	var output bytes.Buffer
+	printCLIUsage(&output)
+	for _, text := range []string{"duckchat doctor", "--network", "--json"} {
+		if !strings.Contains(output.String(), text) {
+			t.Errorf("CLI help omitted %q", text)
+		}
 	}
 }

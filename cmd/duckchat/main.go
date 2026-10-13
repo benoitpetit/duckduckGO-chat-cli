@@ -512,6 +512,10 @@ func printCLIUsage(out io.Writer) {
 		"  Run with no arguments to start an interactive chat.",
 		"  Type /help at the You: prompt for the full command list.",
 		"",
+		accent("Diagnostics:"),
+		command("doctor", "Check local setup and Duck.ai connectivity"),
+		"  Run duckchat doctor --help for options; --network sends no prompt.",
+		"",
 		accent("Common chat commands:"),
 		command("/model [name]", "Change the model"),
 		command("/search <query>", "Search the web"),
@@ -781,6 +785,9 @@ func runShortcutConfiguration() {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "doctor" {
+		os.Exit(runDoctor(os.Args[2:], os.Stdout, os.Stderr))
+	}
 	if len(os.Args) == 2 {
 		switch os.Args[1] {
 		case "--tray-service":
