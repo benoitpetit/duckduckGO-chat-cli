@@ -85,6 +85,18 @@ printf 'Summarize this input' | duckchat --prompt -
 
 The first interactive run must accept Duck.ai's terms before one-shot prompts can run without a terminal. One-shot mode writes the answer to standard output and status or error messages to standard error. JSON mode writes one response or error object. It does not start the tray service, dashboard, API, or startup update check.
 
+### Diagnostics
+
+Run `duckchat doctor` to check local configuration, terms acceptance, browser availability and the export directory. It performs local checks without opening an interactive chat. Network checks are off by default.
+
+Use `duckchat doctor --network` to check Duck.ai reachability and browser capture. This check has a timeout and does not submit a prompt or create a conversation. Use `duckchat doctor --json` for a stable machine-readable report with check IDs, statuses and an exit code. Reports omit captured request data and credentials.
+
+```sh
+duckchat doctor
+duckchat doctor --network
+duckchat doctor --json
+```
+
 ### Command reference (interactive chat)
 
 Start the interactive chat with no arguments:
