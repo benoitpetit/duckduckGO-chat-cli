@@ -33,7 +33,9 @@ func newCoordinateTestChat(t *testing.T) (*Chat, *config.Config) {
 	t.Helper()
 	cfg := &config.Config{ExportDir: t.TempDir()}
 	cfg.Dashboard.RetentionDays = 90
-	return NewChat("", "", "", "", models.GPT6Luna, cfg), cfg
+	chat := NewChat("", "", "", "", models.GPT6Luna, cfg)
+	chat.coordinateArchivePrompt = &fixedCoordinateArchivePrompt{}
+	return chat, cfg
 }
 
 func TestCoordinatedQuestionCommitsOnlyFinalAnswer(t *testing.T) {
@@ -176,6 +178,37 @@ func TestCoordinateNextQuestionConsumesPlanOnce(t *testing.T) {
 	ProcessInput(c, "One question", cfg)
 	if c.HasNextCoordinate() || calls != 3 || len(c.Messages) != 2 || c.Messages[1].Content != "final" {
 		t.Fatalf("one-shot coordinate state: armed=%v, calls=%d, messages=%#v", c.HasNextCoordinate(), calls, c.Messages)
+	}
+}
+
+func TestCoordinateQuestionCanSaveReportAfterCommittingAnswer(t *testing.T) {
+	c, cfg := newCoordinateTestChat(t)
+	prompt := &fixedCoordinateArchivePrompt{save: true}
+	c.coordinateArchivePrompt = prompt
+	c.coordinateRunner = func(_ context.Context, _ CoordinateAgent, stagePrompt string) (string, error) {
+		if strings.Contains(stagePrompt, "Write one clear final answer") {
+			return "public coordinate answer", nil
+		}
+		return "private intermediate response", nil
+	}
+	plan := coordinateTestPlan(CoordinateIndependent, 0)
+	plan.Agents = plan.Agents[:2]
+	if err := c.SetNextCoordinate(plan); err != nil {
+		t.Fatal(err)
+	}
+	ProcessInput(c, "Question for the team", cfg)
+	if prompt.calls != 1 || len(c.CoordinateReports) != 1 {
+		t.Fatalf("archive prompt calls=%d reports=%+v", prompt.calls, c.CoordinateReports)
+	}
+	if len(c.Messages) != 2 || c.Messages[1].Content != "public coordinate answer" || strings.Contains(c.Messages[1].Content, "private intermediate") {
+		t.Fatalf("committed chat messages = %+v", c.Messages)
+	}
+	saved, err := c.HistoryManager.LoadSession(c.SessionID)
+	if err != nil {
+		t.Fatalf("load saved coordinate report: %v", err)
+	}
+	if len(saved.CoordinateReports) != 1 || saved.CoordinateReports[0].Stages[0].Response != "private intermediate response" {
+		t.Fatalf("saved coordinate reports = %+v", saved.CoordinateReports)
 	}
 }
 

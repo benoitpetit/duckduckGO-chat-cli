@@ -14,6 +14,10 @@ import (
 )
 
 func TestClearResetsLocalStateWithoutCapturingBrowserProof(t *testing.T) {
+	report, err := coordinateReportFromRun(coordinateArchiveTestRun(false))
+	if err != nil {
+		t.Fatal(err)
+	}
 	factoryCalls := 0
 	proof := &fakeProofBrowser{}
 	previous := sharedDuckAIBrowser
@@ -38,6 +42,7 @@ func TestClearResetsLocalStateWithoutCapturingBrowserProof(t *testing.T) {
 		NewVqd:                  "old-vqd",
 		OldVqd:                  "older-vqd",
 		Messages:                []Message{{Role: "user", Content: "hello"}},
+		CoordinateReports:       []persistence.CoordinateReport{report},
 		LastOptimizationChanges: []intelligence.OptimizationChange{{SourceID: "source-1", State: chatcontext.SourceStateOmitted}},
 		SessionID:               "session_clear_test",
 		ConversationStartTime:   time.Now(),
@@ -52,6 +57,13 @@ func TestClearResetsLocalStateWithoutCapturingBrowserProof(t *testing.T) {
 	}
 	if len(chatSession.LastOptimizationChanges) != 0 {
 		t.Fatalf("optimization changes after Clear() = %+v, want none", chatSession.LastOptimizationChanges)
+	}
+	if len(chatSession.CoordinateReports) != 0 {
+		t.Fatalf("coordinate reports after Clear() = %+v, want none in the new session", chatSession.CoordinateReports)
+	}
+	saved, err := chatSession.HistoryManager.LoadSession("session_clear_test")
+	if err != nil || len(saved.CoordinateReports) != 1 {
+		t.Fatalf("cleared session archive reports = %+v err=%v, want prior report preserved", saved, err)
 	}
 	if chatSession.VqdHash1 != "" || chatSession.FeSignals != "" || chatSession.FeVersion != "" || chatSession.NewVqd != "" || chatSession.OldVqd != "" {
 		t.Fatal("Clear() retained proof headers from the previous chat session")

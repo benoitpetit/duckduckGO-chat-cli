@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -14,10 +15,11 @@ import (
 )
 
 type scriptedCoordinateSurvey struct {
-	choices []string
-	inputs  []string
-	panels  map[string][][]ui.PanelLine
-	options [][]string
+	choices  []string
+	inputs   []string
+	panels   map[string][][]ui.PanelLine
+	options  [][]string
+	defaults []string
 }
 
 func (s *scriptedCoordinateSurvey) Panel(title string, lines []ui.PanelLine) {
@@ -31,14 +33,48 @@ func (s *scriptedCoordinateSurvey) Panel(title string, lines []ui.PanelLine) {
 	s.panels[title] = append(s.panels[title], cloned)
 }
 
-func (s *scriptedCoordinateSurvey) Select(_ string, options []string, _ string) (string, error) {
+func (s *scriptedCoordinateSurvey) Select(_ string, options []string, defaultChoice string) (string, error) {
 	s.options = append(s.options, append([]string(nil), options...))
+	s.defaults = append(s.defaults, defaultChoice)
 	if len(s.choices) == 0 {
 		return "", errors.New("unexpected coordinate menu selection")
 	}
 	choice := s.choices[0]
 	s.choices = s.choices[1:]
 	return choice, nil
+}
+
+func TestTerminalCoordinateArchivePromptDefaultsToNoSaveAndOffersCancel(t *testing.T) {
+	for _, test := range []struct {
+		choice string
+		save   bool
+		cancel bool
+	}{
+		{choice: "Save report", save: true},
+		{choice: "Do not save"},
+		{choice: "Cancel", cancel: true},
+	} {
+		t.Run(test.choice, func(t *testing.T) {
+			prompts := &scriptedCoordinateSurvey{choices: []string{test.choice}}
+			save, err := (terminalCoordinateArchivePrompt{prompts: prompts}).ChooseSave(coordinateArchiveTestRun(false))
+			if test.cancel {
+				if err == nil || save {
+					t.Fatalf("cancel choice = save:%t error:%v, want canceled", save, err)
+				}
+			} else if err != nil || save != test.save {
+				t.Fatalf("choice %q = save:%t error:%v", test.choice, save, err)
+			}
+			if len(prompts.defaults) != 1 || prompts.defaults[0] != "Do not save" {
+				t.Fatalf("save choice default = %v, want Do not save", prompts.defaults)
+			}
+			if len(prompts.options) != 1 || !reflect.DeepEqual(prompts.options[0], []string{"Save report", "Do not save", "Cancel"}) {
+				t.Fatalf("archive prompt options = %v", prompts.options)
+			}
+			if len(prompts.panels["Coordinate report privacy"]) != 1 {
+				t.Fatal("archive prompt did not show what the report stores")
+			}
+		})
+	}
 }
 
 func (s *scriptedCoordinateSurvey) Input(string) (string, error) {

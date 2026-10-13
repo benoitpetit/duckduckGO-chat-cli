@@ -616,14 +616,60 @@ func firstCoordinateStageError(run *CoordinateRun) error {
 	return nil
 }
 
+type terminalCoordinateArchivePrompt struct {
+	prompts coordinateSurvey
+}
+
+func (p terminalCoordinateArchivePrompt) ChooseSave(run *CoordinateRun) (bool, error) {
+	if p.prompts == nil || run == nil {
+		return false, errors.New("coordinate archive menu is unavailable")
+	}
+	outcome := "Complete"
+	if run.Partial {
+		outcome = "Partial"
+	}
+	p.prompts.Panel("Coordinate report privacy", []ui.PanelLine{
+		coordinatePanelField("Run", outcome+" · "+coordinateStrategyName(run.Plan.Strategy), ui.PanelForeground),
+		coordinatePanelField("Stored locally", "The report contains model prompts and intermediate outputs.", ui.PanelWarning),
+	})
+	selected, err := p.prompts.Select("Save this coordinate report?", []string{"Save report", "Do not save", "Cancel"}, "Do not save")
+	if err != nil {
+		return false, err
+	}
+	switch selected {
+	case "Save report":
+		return true, nil
+	case "Do not save":
+		return false, nil
+	case "Cancel":
+		return false, surveyterminal.InterruptErr
+	default:
+		return false, fmt.Errorf("unknown coordinate archive choice %q", selected)
+	}
+}
+
 func HandleCoordinateCommand(c *Chat, cfg *config.Config, args string) {
-	if strings.TrimSpace(args) == "cancel" {
+	args = strings.TrimSpace(args)
+	if args == "cancel" {
 		c.CancelNextCoordinate()
 		ui.AIln("Coordinate selection cleared.")
 		return
 	}
-	if strings.TrimSpace(args) != "" {
-		ui.Errorln("Usage: /coordinate [cancel]")
+	arguments := strings.Fields(args)
+	if len(arguments) > 0 && (arguments[0] == "runs" || arguments[0] == "show") {
+		title, lines, err := coordinateHistoryCommand(c, arguments)
+		if err != nil {
+			ui.Errorln("%v", err)
+			return
+		}
+		ui.PrintStyledPanel(title, lines)
+		if c.Display != nil {
+			c.Display.RecordPanel(title, lines)
+		}
+		return
+	}
+	if args != "" {
+		ui.Errorln("Usage: /coordinate [cancel|runs|show <run_id>]")
 		return
 	}
 	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {

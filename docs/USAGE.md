@@ -48,7 +48,7 @@ Type `/help` in the CLI for the current command list.
 | --- | --- |
 | `/clear` | Save the current conversation and start a fresh chat session |
 | `/config` | Change the model, appearance, shortcuts, and other settings |
-| `/coordinate [cancel]` | Coordinate selected Duck.ai models for the next question |
+| `/coordinate [cancel|runs|show <run_id>]` | Coordinate models and browse saved reports |
 | `/context` | Show retained source counts, approximate sizes, and optimization state |
 | `/sources` | Show references supplied with the latest exchange |
 | `/copy` | Copy a response or code block |
@@ -114,7 +114,11 @@ Requests run one after another by default. In the **Execution** submenu, choose 
 
 Chain and Independent plan three Duck.ai requests. Debate plans five requests with one round or seven with two rounds, whether sequential or parallel. Retries performed by Duck.ai's existing request recovery can add calls. If a stage fails, choose **Resume incomplete stages** to retry failed/cancelled work and continue its dependents while keeping completed outputs. Each Resume action attempts each incomplete stage once; Duck.ai's existing `Retry-After`, clean-session, and browser recovery remains active inside each request. If at least one agent output is complete and another is missing, you can instead choose **Synthesize partial result**. That answer is labeled `Coordinate · partial`, names unavailable stages, and is summarized as using available outputs only. Choose **Stop** to leave the conversation unchanged.
 
-Cancelling with Ctrl+C also stops the run without committing the question or answer. A complete answer, or a partial answer you explicitly selected, is added to the conversation exactly once. Intermediate prompts and agent responses remain in memory for the active run; they are not written to the conversation, local preset, or analytics. After the response, a compact **Coordinate results** panel lists each model and role, its completed/incomplete stages, whether all planned outputs were used, and that synthesis was asked to flag unresolved disagreements. This is a summary of the workflow; it does not independently verify model claims. The CLI then announces that Coordinate mode has ended.
+Cancelling with Ctrl+C also stops the run without committing the question or answer. A complete answer, or a partial answer you explicitly selected, is added to the conversation exactly once. After an accepted answer, the CLI asks whether to save that run's prompts and intermediate outputs. **Do not save** is the default; choosing **Cancel** also leaves the report unsaved. Non-interactive runs keep this no-save behavior because they cannot make a per-run choice.
+
+Choosing **Save report** stores the question, strategy, stage order/status, model and role assignments, prompts, outputs, errors, and final answer inside the compressed local conversation archive. The report follows the conversation's retention period and is removed when that conversation is deleted. Reports are excluded from ordinary chat messages, later model context, and analytics. Use `/coordinate runs` to list saved reports in the active conversation and `/coordinate show <run_id>` to inspect one, including its intermediate prompts and outputs. These records are model output history; they do not independently verify the claims.
+
+After the response, a compact **Coordinate results** panel lists each model and role, its completed/incomplete stages, whether all planned outputs were used, and that synthesis was asked to flag unresolved disagreements. This is a summary of the workflow; it does not independently verify model claims. The CLI then announces that Coordinate mode has ended.
 
 If the question includes an image, every selected model must support image input. If a model is incompatible, the CLI does not send the question and keeps the image and coordinate selection. Reopen `/coordinate` to adjust the models, then submit the question again.
 

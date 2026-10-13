@@ -54,8 +54,8 @@ func GetCommandRegistry() *CommandRegistry {
 			},
 			"/coordinate": {
 				Name:        "/coordinate",
-				Description: "Coordinate selected Duck.ai models for the next question",
-				Usage:       "/coordinate [cancel]",
+				Description: "Coordinate Duck.ai models, then list or inspect saved coordinate reports",
+				Usage:       "/coordinate [cancel|runs|show <run_id>]",
 				Category:    "productivity",
 			},
 			"/issue": {

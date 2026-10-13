@@ -566,7 +566,7 @@ func printCLIUsage(out io.Writer) {
 		command("/file <path>", "Add a local file"),
 		command("/url <url>", "Add a web page"),
 		command("/image [idea]", "Generate an image; omit idea for guided options"),
-		command("/coordinate [cancel]", "Coordinate models for the next question"),
+		command("/coordinate [cancel|runs|show <run_id>]", "Coordinate models and browse saved reports"),
 		command("/speak", "Start a voice chat"),
 		command("/history", "Browse saved conversations"),
 		command("/sessions [query]", "Find, organize, restore, or delete saved sessions"),

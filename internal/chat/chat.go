@@ -52,6 +52,7 @@ type Chat struct {
 	Model                   models.Model
 	Messages                []Message
 	PendingSources          []chatcontext.SourceRef
+	CoordinateReports       []persistence.CoordinateReport
 	LastOptimizationChanges []intelligence.OptimizationChange
 	pendingImages           []media.ImageAttachment
 	Client                  *http.Client
@@ -81,6 +82,7 @@ type Chat struct {
 	coordinateNext                    *CoordinatePlan
 	coordinateRunner                  CoordinateRunner
 	coordinateRecoveryPrompt          CoordinateRecoveryPrompt
+	coordinateArchivePrompt           CoordinateArchivePrompt
 	rateLimitFallbackOpen             time.Time
 	rateLimitBrowserOpenedThisAttempt bool
 	retryProofTimeout                 time.Duration
@@ -451,6 +453,7 @@ func (c *Chat) Clear(cfg *config.Config) error {
 	c.Messages = []Message{}
 	c.pendingImages = nil
 	c.PendingSources = nil
+	c.CoordinateReports = nil
 	c.LastOptimizationChanges = nil
 	if c.Display != nil {
 		c.Display.Clear()
@@ -2463,6 +2466,7 @@ func (c *Chat) recordContextMessage(content string) {
 // RestoreContext restores the chat context from a given conversation session.
 func (c *Chat) RestoreContext(session *persistence.ConversationSession) {
 	c.PendingSources = nil
+	c.CoordinateReports = cloneCoordinateReports(session.CoordinateReports)
 	// Saved CLI history is restored locally. Start a fresh Duck.ai durable
 	// conversation identity and send this transcript on the next chat request.
 	c.resetDurableConversation()
@@ -2489,6 +2493,17 @@ func (c *Chat) RestoreContext(session *persistence.ConversationSession) {
 	c.ConversationStartTime = session.StartTime
 	c.Model = models.Model(session.Model) // Restore the model used in that session
 	ui.AIln("Context restored from session %s. Model set to %s.", session.ID, session.Model)
+}
+
+func cloneCoordinateReports(reports []persistence.CoordinateReport) []persistence.CoordinateReport {
+	if reports == nil {
+		return nil
+	}
+	cloned := append([]persistence.CoordinateReport(nil), reports...)
+	for index := range cloned {
+		cloned[index].Stages = append([]persistence.CoordinateReportStage(nil), reports[index].Stages...)
+	}
+	return cloned
 }
 
 // Helper methods for intelligent features
@@ -2548,10 +2563,11 @@ func (c *Chat) SaveCurrentSession() error {
 		started = time.Now()
 	}
 	session := &persistence.ConversationSession{
-		ID:        c.SessionID,
-		StartTime: started,
-		Model:     string(c.Model),
-		Messages:  intelligenceMessages,
+		ID:                c.SessionID,
+		StartTime:         started,
+		Model:             string(c.Model),
+		Messages:          intelligenceMessages,
+		CoordinateReports: cloneCoordinateReports(c.CoordinateReports),
 		Analytics: persistence.SessionAnalytics{
 			MessageCount:      len(c.Messages),
 			TotalTokens:       sessionAnalytics.TotalTokensEstimate,

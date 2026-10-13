@@ -125,7 +125,7 @@ These slash commands are typed at the `You:` prompt after the interactive chat s
 | `/load [session_id]`  | Restore a saved conversation                              |
 | `/speak`              | Start or restore a voice conversation                     |
 | `/image [idea]`       | Generate an image, with an optional guided prompt flow    |
-| `/coordinate [cancel]` | Combine two or three Duck.ai models for the next question |
+| `/coordinate [cancel|runs|show <run_id>]` | Coordinate models and browse saved reports |
 
 #### Add context and manage prompts
 
@@ -156,7 +156,7 @@ Use `&&` to combine `/file`, `/url`, and `/search` before a prompt. `/library`, 
 
 `/file` and `/library` also accept text-based PDFs. Extracted text retains `[Page N]` markers; PDF input and extracted text are each limited to 10 MiB, and library imports also keep the existing 2 MiB aggregate context limit. Scanned PDFs without embedded text are not OCR'd, and password-protected PDFs are unsupported.
 
-Run `/coordinate` to choose two or three Duck.ai models, edit their roles, and select a chain, independent-answer, or debate flow for your next question. Each strategy starts with two prefilled agents and role suggestions suited to its workflow. Model and role choices are saved separately for Independent, Chain, and Debate, so switching strategies restores that strategy’s preset. The menu shows planned requests (retries excluded) and maximum concurrency. Independent and Debate can run independent steps in parallel. Model, role, and strategy edits are saved locally as you make them. On failure, resume incomplete stages, request a clearly marked partial synthesis when outputs are missing, or stop without changing conversation history. A result panel lists the models, roles, completed stages, and whether synthesis used all planned outputs. Prompts and intermediate outputs stay in memory for the current run. Use `/coordinate cancel` to clear a pending selection. See the [coordinate guide](docs/USAGE.md#coordinate-models-for-one-question) for details.
+Run `/coordinate` to choose two or three Duck.ai models, edit their roles, and select a chain, independent-answer, or debate flow for your next question. Each strategy starts with two prefilled agents and role suggestions suited to its workflow. Model and role choices are saved separately for Independent, Chain, and Debate, so switching strategies restores that strategy’s preset. The menu shows planned requests (retries excluded) and maximum concurrency. Independent and Debate can run independent steps in parallel. Model, role, and strategy edits are saved locally as you make them. On failure, resume incomplete stages, request a clearly marked partial synthesis when outputs are missing, or stop without changing conversation history. A result panel lists the models, roles, completed stages, and whether synthesis used all planned outputs. After an accepted answer, choose whether to save that run’s prompts and intermediate outputs; **Do not save** is the default. Saved reports stay in the compressed local conversation archive, follow its retention and deletion rules, and remain outside normal chat history and analytics. Use `/coordinate runs` to list reports and `/coordinate show <run_id>` to inspect one in the active conversation. These reports preserve model outputs; they do not verify their claims. Use `/coordinate cancel` to clear a pending selection. See the [coordinate guide](docs/USAGE.md#coordinate-models-for-one-question) for details.
 
 ### Example
 

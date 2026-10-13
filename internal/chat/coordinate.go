@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"duckduckgo-chat-cli/internal/models"
+	"duckduckgo-chat-cli/internal/persistence"
 )
 
 type CoordinateStrategy string
@@ -17,7 +18,7 @@ const (
 	CoordinateChain       CoordinateStrategy = "chain"
 	CoordinateIndependent CoordinateStrategy = "independent"
 	CoordinateDebate      CoordinateStrategy = "debate"
-	coordinateReplyLimit                     = 12000
+	coordinateReplyLimit                     = persistence.CoordinateReportTextLimit
 )
 
 type CoordinateAgent struct {

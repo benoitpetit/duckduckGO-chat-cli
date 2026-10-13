@@ -4,15 +4,107 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	"duckduckgo-chat-cli/internal/config"
 	"duckduckgo-chat-cli/internal/models"
+	"duckduckgo-chat-cli/internal/persistence"
 	"duckduckgo-chat-cli/internal/ui"
 
 	surveyterminal "github.com/AlecAivazis/survey/v2/terminal"
+	"golang.org/x/term"
 )
+
+// CoordinateArchivePrompt makes the per-run local persistence choice explicit.
+type CoordinateArchivePrompt interface {
+	ChooseSave(*CoordinateRun) (bool, error)
+}
+
+func coordinateReportFromRun(run *CoordinateRun) (persistence.CoordinateReport, error) {
+	if run == nil {
+		return persistence.CoordinateReport{}, errors.New("coordinate run is unavailable")
+	}
+	if run.Complete == run.Partial || strings.TrimSpace(run.FinalAnswer) == "" {
+		return persistence.CoordinateReport{}, errors.New("coordinate run has no accepted final answer")
+	}
+	if !isCoordinateStrategy(run.Plan.Strategy) || strings.TrimSpace(run.Question) == "" || len(run.Stages) == 0 {
+		return persistence.CoordinateReport{}, errors.New("coordinate run is missing report details")
+	}
+	now := time.Now()
+	started := run.StartedAt
+	if started.IsZero() {
+		started = now
+	}
+	question, questionTruncated := truncateCoordinateReportText(run.Question)
+	finalAnswer, finalTruncated := truncateCoordinateReportText(run.FinalAnswer)
+	report := persistence.CoordinateReport{
+		ID:                   fmt.Sprintf("coordinate_%d", now.UnixNano()),
+		Strategy:             string(run.Plan.Strategy),
+		Question:             question,
+		QuestionTruncated:    questionTruncated,
+		StartedAt:            started,
+		FinishedAt:           now,
+		Complete:             run.Complete,
+		Partial:              run.Partial,
+		FinalAnswer:          finalAnswer,
+		FinalAnswerTruncated: finalTruncated,
+		Stages:               make([]persistence.CoordinateReportStage, 0, len(run.Stages)),
+	}
+	for _, stage := range run.Stages {
+		prompt, promptTruncated := truncateCoordinateReportText(stage.Prompt)
+		response, responseTruncated := truncateCoordinateReportText(stage.Response)
+		stageError, _ := truncateCoordinateReportText(stage.Err)
+		report.Stages = append(report.Stages, persistence.CoordinateReportStage{
+			ID: string(stage.ID), Label: stage.Label, Model: string(stage.Agent.Model), Role: stage.Agent.Role,
+			Status: string(stage.Status), Attempt: stage.Attempt, StartedAt: stage.StartedAt, FinishedAt: stage.FinishedAt,
+			Prompt: prompt, PromptTruncated: promptTruncated, Response: response, ResponseTruncated: responseTruncated, Error: stageError,
+		})
+	}
+	return report, nil
+}
+
+func truncateCoordinateReportText(value string) (string, bool) {
+	if len(value) <= persistence.CoordinateReportTextLimit {
+		return value, false
+	}
+	const marker = "\n[truncated]"
+	return truncateUTF8(value, persistence.CoordinateReportTextLimit-len(marker)) + marker, true
+}
+
+func (c *Chat) saveCoordinateReportIfRequested(run *CoordinateRun) error {
+	prompt := c.coordinateArchivePrompt
+	if prompt == nil {
+		// Headless runs keep the privacy-preserving default because they cannot
+		// make an explicit per-run choice.
+		if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
+			return nil
+		}
+		prompt = terminalCoordinateArchivePrompt{prompts: &terminalImagePromptSurvey{}}
+	}
+	save, err := prompt.ChooseSave(run)
+	if errors.Is(err, surveyterminal.InterruptErr) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("could not choose coordinate report save option: %w", err)
+	}
+	if !save {
+		return nil
+	}
+	report, err := coordinateReportFromRun(run)
+	if err != nil {
+		return err
+	}
+	previous := cloneCoordinateReports(c.CoordinateReports)
+	c.CoordinateReports = append(c.CoordinateReports, report)
+	if err := c.SaveCurrentSession(); err != nil {
+		c.CoordinateReports = previous
+		return fmt.Errorf("could not save coordinate report: %w", err)
+	}
+	return nil
+}
 
 func (c *Chat) SetNextCoordinate(plan CoordinatePlan) error {
 	if err := plan.Validate(); err != nil {
@@ -232,6 +324,11 @@ func (c *Chat) processPendingCoordinate(input string, cfg *config.Config) bool {
 	}
 	if err == nil && run != nil {
 		err = c.CommitCoordinatedQuestion(input, run)
+	}
+	if err == nil && run != nil {
+		if saveErr := c.saveCoordinateReportIfRequested(run); saveErr != nil {
+			ui.Warningln("Could not save coordinate report; the answer remains in chat history: %v", saveErr)
+		}
 	}
 	if err != nil {
 		c.reportChatFailure(ctx, err)

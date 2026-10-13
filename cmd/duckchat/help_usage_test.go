@@ -20,6 +20,7 @@ func TestPrintCLIUsageGuidesInteractiveUseWithoutLogoWhenRedirected(t *testing.T
 		"--file PATH",
 		"--url URL",
 		"--search QUERY",
+		"/coordinate [cancel|runs|show <run_id>]",
 		"Run with no arguments to start an interactive chat.",
 		"Type /help at the You: prompt for the full command list.",
 		"/image [idea]",

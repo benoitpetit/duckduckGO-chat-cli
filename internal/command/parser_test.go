@@ -1,6 +1,9 @@
 package command
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParsePreservesQuotedArgumentsAndPrompt(t *testing.T) {
 	parsed, err := Parse(`/file "notes and plans.md" -- summarize "the key points"`)
@@ -73,6 +76,16 @@ func TestCommandRegistryIncludesUsageAndDashboardExamples(t *testing.T) {
 		if !found {
 			t.Errorf("dashboard command is missing example %q", example)
 		}
+	}
+}
+
+func TestCoordinateCommandDocumentsSavedRunSubcommands(t *testing.T) {
+	info, ok := GetCommandRegistry().Commands["/coordinate"]
+	if !ok {
+		t.Fatal("/coordinate command is missing")
+	}
+	if info.Usage != "/coordinate [cancel|runs|show <run_id>]" || !strings.Contains(info.Description, "saved coordinate reports") {
+		t.Fatalf("/coordinate help = %+v", info)
 	}
 }
 
