@@ -2,7 +2,7 @@ module duckduckgo-chat-cli
 
 replace github.com/c-bata/go-prompt => ./third_party/go-prompt
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.7
@@ -18,6 +18,7 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/gen2brain/webp v0.6.4
 	github.com/gin-gonic/gin v1.10.1
+	github.com/giraffesyo/pdf v0.5.0
 	github.com/gogpu/systray v0.3.0
 	github.com/jezek/xgb v1.3.1
 	github.com/swaggo/files v1.0.1
