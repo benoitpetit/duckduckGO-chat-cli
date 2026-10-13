@@ -72,18 +72,19 @@ The examples below use `duckchat` as the executable name. If you keep the releas
 
 ### Command-line options (when launching)
 
-These flags are passed to `duckchat` when you launch it from the terminal. Use `--help` or `--version` without opening an interactive chat. Send a single prompt with `--prompt`; choose a model with `--model`, or use `--json` for machine-readable output. Pass `-` to read a prompt from standard input:
+These flags are passed to `duckchat` when you launch it from the terminal. Use `--help` or `--version` without opening an interactive chat. Send a single prompt with `--prompt`; choose a model with `--model`, or use `--json` for machine-readable output. Pass `-` to read a prompt from standard input. Add repeatable `--file`, `--url`, and `--search` options to give that prompt context:
 
 ```sh
 duckchat --help
 duckchat --prompt "Explain the Go memory model" --model gpt-6-luna
 duckchat --prompt "Summarize this input" --json
 printf 'Summarize this input' | duckchat --prompt -
+duckchat --prompt "Compare these sources" --file report.pdf --file chart.png --url https://example.com --search "latest release notes"
 ```
 
 <img src="docs/images/cli-options-help.png" alt="The standard duckchat --help output with launch options and common interactive commands" width="520">
 
-The first interactive run must accept Duck.ai's terms before one-shot prompts can run without a terminal. One-shot mode writes the answer to standard output and status or error messages to standard error. JSON mode writes one response or error object. It does not start the tray service, dashboard, API, or startup update check.
+The first interactive run must accept Duck.ai's terms before one-shot prompts can run without a terminal. Context flags require `--prompt`; `--prompt -` can read the question from standard input. Context is prepared in a stable order: all files, then URLs, then searches. `--file` accepts supported text files, PDFs, and PNG/JPEG/WebP images. Text context is limited to 2 MiB combined; image files keep their existing 10 MiB per-file limit. One-shot mode writes the answer to standard output and status or error messages to standard error. JSON mode writes one response or error object. It does not start the tray service, dashboard, API, or startup update check.
 
 ### Diagnostics
 
@@ -192,7 +193,7 @@ Duck.ai's native web search and image generation can be enabled under **Duck.ai 
 
 The optional dashboard listens on `127.0.0.1` and shows local usage, recent CLI activity, and conversation history when enabled. Its conversation page can search, rename, tag, favorite, and delete saved sessions; delete asks for confirmation. Start or open it with `/dashboard on` or `/dashboard open`; use `/dashboard status` to check it and `/dashboard off` to stop it. Conversation controls appear only when **Show Conversations** is enabled. Dashboard privacy, retention, and password settings are available in `/config`.
 
-When enabled, the optional HTTP API binds to the local machine by default. Enable it in `/config`, then use `/api` to start or stop it. See the [API reference](docs/README.md) for the specification.
+When enabled, the optional HTTP API binds to the local machine by default. Enable it in `/config`, then use `/api` to start or stop it. `POST /api/v1/chat` returns a complete JSON response; `POST /api/v1/chat/stream` returns server-sent events for incremental clients. See the [API reference](docs/README.md) for the specification and event format.
 
 ## Privacy and support
 

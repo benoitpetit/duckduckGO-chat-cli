@@ -10,7 +10,7 @@ Chrome or Chromium is required for Duck.ai chat and voice. Version 115 or newer 
 
 ### One-shot prompts
 
-Use `--prompt` to send one message and exit. Add `--model` to choose a model, and `--json` to write the result as JSON. Pass `-` as the prompt value to read from standard input.
+Use `--prompt` to send one message and exit. Add `--model` to choose a model, and `--json` to write the result as JSON. Pass `-` as the prompt value to read from standard input. Add `--file`, `--url`, or `--search` one or more times to prepare context for the prompt.
 
 ```sh
 duckchat --help
@@ -19,7 +19,10 @@ duckchat --prompt "Explain the Go memory model"
 duckchat --prompt "Explain the Go memory model" --model gpt-6-luna
 duckchat --prompt "Summarize this input" --json
 printf 'Summarize this input' | duckchat --prompt -
+duckchat --prompt "Compare these sources" --file report.pdf --file chart.png --url https://example.com --search "latest release notes"
 ```
+
+Context flags require `--prompt`; they also work with `--prompt -`. Sources are loaded in a stable order regardless of how the options are interleaved: all files first, then URLs, then searches. `--file` accepts supported text files, PDFs, and PNG/JPEG/WebP images. The combined text context limit is 2 MiB, and each image keeps its existing 10 MiB file limit. Invalid options are rejected before chat browser setup.
 
 The first interactive run must accept the terms before one-shot prompts can run without a terminal. One-shot mode does not start the tray service, dashboard, API, or startup update check. Its response goes to standard output. Status and error messages go to standard error. JSON mode writes a single response or error object to standard output.
 
@@ -205,7 +208,15 @@ The dashboard stores usage snapshots and saved conversation archives locally. To
 
 ## Local API
 
-The optional HTTP API runs on `127.0.0.1` by default. Enable it in `/config`, then use `/api` to start or stop the server. The Swagger UI is available at `http://127.0.0.1:8080/doc/index.html` while the API is running. See the [API reference](README.md#api-reference) for the generated specification files.
+The optional HTTP API runs on `127.0.0.1` by default. Enable it in `/config`, then use `/api` to start or stop the server. The Swagger UI is available at `http://127.0.0.1:8080/doc/index.html` while the API is running. `POST /api/v1/chat` returns its existing JSON envelope. `POST /api/v1/chat/stream` accepts the same JSON request and returns server-sent events; use `curl -N` to keep the stream open:
+
+```sh
+curl -N http://127.0.0.1:8080/api/v1/chat/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"Explain the Go memory model"}'
+```
+
+The stream begins with `start` (`{"model":"..."}`), followed by one or more `delta` events (`{"delta":"..."}`). Join the delta strings to rebuild the response. A successful stream ends with `done`, containing `model`, `message_id`, and `metadata`; a failed generation ends with `error`, containing an API error `code`, `message`, and `details`. Invalid requests are returned as the normal JSON error envelope before streaming starts. The same API key and configured CORS rules apply. If the client disconnects, generation is cancelled and the partial turn is removed from chat history.
 
 The API requires an API key before it can bind to a non-loopback address. Keep it on the local address unless a remote integration needs access and you have configured a key.
 

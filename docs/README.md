@@ -10,6 +10,8 @@ Start with the guide that matches what you are doing:
 The local HTTP API specification is generated from annotations in `internal/api/docs.go`.
 The generated files are `docs.go`, `swagger.json`, and `swagger.yaml` in this directory.
 
+`POST /api/v1/chat` retains its JSON response. For incremental output, use `POST /api/v1/chat/stream`: it emits `start`, `delta`, then `done` or `error` server-sent events. Join `delta` values to rebuild the response; `done` carries model and processing metadata. The stream uses the same API-key and CORS middleware, and a disconnected client cancels generation.
+
 When the API is running, open the Swagger UI at:
 
 ```text
