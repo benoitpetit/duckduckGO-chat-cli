@@ -158,19 +158,14 @@ func coordinateModelAvailability(plan CoordinatePlan) []int {
 }
 
 func coordinateDuplicateAdvisory(plan CoordinatePlan) string {
-	seenModels := make(map[models.Model]bool, len(plan.Agents))
-	seenRoles := make(map[string]bool, len(plan.Agents))
-	duplicate := false
-	for _, agent := range plan.Agents {
+	for i, agent := range plan.Agents {
 		role := strings.ToLower(strings.TrimSpace(agent.Role))
-		if seenModels[agent.Model] || seenRoles[role] {
-			duplicate = true
+		for _, other := range plan.Agents[i+1:] {
+			otherRole := strings.ToLower(strings.TrimSpace(other.Role))
+			if agent.Model != other.Model && role == otherRole {
+				return "Duplicate roles across different models are allowed; agents with the same role may give similar answers."
+			}
 		}
-		seenModels[agent.Model] = true
-		seenRoles[role] = true
-	}
-	if duplicate {
-		return "Duplicate models or roles are allowed; agents may give similar answers."
 	}
 	return ""
 }

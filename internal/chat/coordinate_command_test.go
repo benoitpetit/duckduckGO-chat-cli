@@ -416,7 +416,7 @@ func TestCoordinateMenuRequiresReplacingUnavailableSavedModel(t *testing.T) {
 	}
 }
 
-func TestCoordinateMenuAllowsDuplicateModelsWithAdvisory(t *testing.T) {
+func TestCoordinateMenuAllowsDuplicateModelsWithoutAdvisory(t *testing.T) {
 	c, cfg := newCoordinateTestChat(t)
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	cfg.Coordinate = config.CoordinateConfig{
@@ -441,7 +441,17 @@ func TestCoordinateMenuAllowsDuplicateModelsWithAdvisory(t *testing.T) {
 			summary += segment.Text
 		}
 	}
-	if !strings.Contains(strings.ToLower(summary), "duplicate") {
-		t.Fatalf("duplicate selection advisory missing from menu: %q", summary)
+	if strings.Contains(strings.ToLower(summary), "duplicate") {
+		t.Fatalf("same-model agents unexpectedly triggered duplicate advisory: %q", summary)
+	}
+}
+
+func TestCoordinateDuplicateAdvisoryForRepeatedRoleAcrossDifferentModels(t *testing.T) {
+	plan := CoordinatePlan{Agents: []CoordinateAgent{
+		{Model: models.GPT6Luna, Role: "Researcher"},
+		{Model: models.GPT5Luna, Role: " researcher "},
+	}}
+	if advisory := coordinateDuplicateAdvisory(plan); advisory == "" {
+		t.Fatal("repeated role across different models should trigger advisory")
 	}
 }
