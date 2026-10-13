@@ -914,13 +914,19 @@ func runOneShot(options cliOptions) int {
 	if options.model != "" {
 		model, _ = models.ResolveModel(options.model)
 	}
+	preparedContext, err := chat.PrepareOneShotContext(context.Background(), options.files, options.urls, options.searches, cfg)
+	if err != nil {
+		printOneShotError(options, err.Error())
+		return 1
+	}
 	chatSession = chat.NewChat("", "", "", "", model, cfg)
+	chatSession.QueueImageAttachments(preparedContext.Images)
 	defer func() {
 		if err := chat.ShutdownBrowser(); err != nil {
 			ui.Warningln("Could not shut down browser: %v", err)
 		}
 	}()
-	response, err := chat.ProcessInputContext(context.Background(), chatSession, promptText, cfg)
+	response, err := chat.ProcessInputContextWithContext(context.Background(), chatSession, preparedContext.Text, promptText, cfg, preparedContext.Sources)
 	if err != nil {
 		printOneShotError(options, err.Error())
 		return 1

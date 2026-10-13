@@ -17,6 +17,9 @@ func TestPrintCLIUsageGuidesInteractiveUseWithoutLogoWhenRedirected(t *testing.T
 	got := output.String()
 	for _, want := range []string{
 		"Usage: duckchat [options]",
+		"--file PATH",
+		"--url URL",
+		"--search QUERY",
 		"Run with no arguments to start an interactive chat.",
 		"Type /help at the You: prompt for the full command list.",
 		"/image [idea]",
