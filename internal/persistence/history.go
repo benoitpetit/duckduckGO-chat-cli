@@ -3,6 +3,7 @@ package persistence
 import (
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,6 +30,9 @@ type ConversationSession struct {
 	Messages          []intelligence.Message `json:"messages"`
 	OptimizedMessages []intelligence.Message `json:"optimized_messages,omitempty"`
 	Analytics         SessionAnalytics       `json:"analytics"`
+	Title             string                 `json:"title,omitempty"`
+	Tags              []string               `json:"tags"`
+	Favorite          bool                   `json:"favorite,omitempty"`
 	Compressed        bool                   `json:"compressed"`
 	Version           string                 `json:"version"`
 }
@@ -87,6 +91,16 @@ func (hm *HistoryManager) SaveSession(session *ConversationSession) error {
 	if session == nil || !storageSessionIDPattern.MatchString(session.ID) {
 		return fmt.Errorf("invalid session id")
 	}
+	metadata, err := validateSessionMetadata(SessionMetadata{Title: session.Title, Tags: session.Tags, Favorite: session.Favorite})
+	if err != nil {
+		return err
+	}
+	if metadata.Title == "" {
+		metadata.Title = generatedSessionTitle(session.Messages)
+	}
+	session.Title = metadata.Title
+	session.Tags = metadata.Tags
+	session.Favorite = metadata.Favorite
 	hm.saveMu.Lock()
 	defer hm.saveMu.Unlock()
 	// Ensure storage directory exists
@@ -148,6 +162,85 @@ func (hm *HistoryManager) LoadSession(sessionID string) (*ConversationSession, e
 	fullPath = filepath.Join(hm.StorageDir, filename)
 
 	return hm.loadUncompressed(fullPath)
+}
+
+// UpdateSessionMetadata changes user-editable archive metadata without making
+// the edit appear as a new conversation save.
+func (hm *HistoryManager) UpdateSessionMetadata(sessionID string, metadata SessionMetadata) error {
+	if !storageSessionIDPattern.MatchString(sessionID) {
+		return fmt.Errorf("invalid session id")
+	}
+	normalized, err := validateSessionMetadata(metadata)
+	if err != nil {
+		return err
+	}
+	hm.saveMu.Lock()
+	defer hm.saveMu.Unlock()
+
+	session, err := hm.LoadSession(sessionID)
+	if err != nil {
+		return err
+	}
+	if normalized.Title == "" {
+		normalized.Title = generatedSessionTitle(session.Messages)
+	}
+	session.Title = normalized.Title
+	session.Tags = normalized.Tags
+	session.Favorite = normalized.Favorite
+	if err := os.MkdirAll(hm.StorageDir, 0o700); err != nil {
+		return fmt.Errorf("failed to create storage directory: %w", err)
+	}
+	legacyPath := filepath.Join(hm.StorageDir, fmt.Sprintf("session_%s.json", sessionID))
+	if err := hm.saveCompressed(session, legacyPath); err != nil {
+		return fmt.Errorf("failed to update session metadata: %w", err)
+	}
+	if err := os.Remove(legacyPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove legacy session archive after metadata update: %w", err)
+	}
+	return nil
+}
+
+// DeleteSession removes both supported archive representations for one
+// validated session ID and reports partial cleanup failures.
+func (hm *HistoryManager) DeleteSession(sessionID string) error {
+	if !storageSessionIDPattern.MatchString(sessionID) {
+		return fmt.Errorf("invalid session id")
+	}
+	hm.saveMu.Lock()
+	defer hm.saveMu.Unlock()
+
+	paths := []string{
+		filepath.Join(hm.StorageDir, fmt.Sprintf("session_%s.json.gz", sessionID)),
+		filepath.Join(hm.StorageDir, fmt.Sprintf("session_%s.json", sessionID)),
+	}
+	removed := false
+	var removeErrors []error
+	for _, path := range paths {
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			removeErrors = append(removeErrors, fmt.Errorf("inspect %s: %w", filepath.Base(path), err))
+			continue
+		}
+		if info.IsDir() {
+			removeErrors = append(removeErrors, fmt.Errorf("remove %s: expected an archive file, found a directory", filepath.Base(path)))
+			continue
+		}
+		if err := os.Remove(path); err != nil {
+			removeErrors = append(removeErrors, fmt.Errorf("remove %s: %w", filepath.Base(path), err))
+			continue
+		}
+		removed = true
+	}
+	if len(removeErrors) > 0 {
+		return errors.Join(removeErrors...)
+	}
+	if !removed {
+		return fmt.Errorf("session %s not found: %w", sessionID, os.ErrNotExist)
+	}
+	return nil
 }
 
 // ListSessions returns a list of available sessions
@@ -297,6 +390,9 @@ func (hm *HistoryManager) GetSessionSummary(sessionID string) (*SessionSummary, 
 
 	summary := &SessionSummary{
 		ID:            session.ID,
+		Title:         session.Title,
+		Tags:          append([]string{}, session.Tags...),
+		Favorite:      session.Favorite,
 		StartTime:     session.StartTime,
 		EndTime:       session.EndTime,
 		Duration:      session.Analytics.SessionDuration,
@@ -358,7 +454,8 @@ func (hm *HistoryManager) ListSessionSummaries() ([]SessionSummary, error) {
 		summary := SessionSummary{
 			ID: session.ID, StartTime: session.StartTime, EndTime: session.EndTime,
 			Duration: session.Analytics.SessionDuration, MessageCount: session.Analytics.MessageCount,
-			Model: session.Model, KeyTopics: []string{},
+			Model: session.Model, KeyTopics: []string{}, Title: session.Title,
+			Tags: append([]string{}, session.Tags...), Favorite: session.Favorite,
 		}
 		for _, message := range session.Messages {
 			if message.Role == "user" {
@@ -502,6 +599,7 @@ func (hm *HistoryManager) loadCompressed(filePath string) (*ConversationSession,
 	if err := decoder.Decode(&session); err != nil {
 		return nil, err
 	}
+	normalizeLoadedSessionMetadata(&session)
 
 	return &session, nil
 }
@@ -519,6 +617,7 @@ func (hm *HistoryManager) loadUncompressed(filePath string) (*ConversationSessio
 	if err := decoder.Decode(&session); err != nil {
 		return nil, err
 	}
+	normalizeLoadedSessionMetadata(&session)
 
 	return &session, nil
 }
@@ -635,6 +734,9 @@ func truncateMessage(message string, maxLength int) string {
 
 type SessionSummary struct {
 	ID            string        `json:"id"`
+	Title         string        `json:"title"`
+	Tags          []string      `json:"tags"`
+	Favorite      bool          `json:"favorite"`
 	StartTime     time.Time     `json:"start_time"`
 	EndTime       time.Time     `json:"end_time"`
 	Duration      time.Duration `json:"duration"`

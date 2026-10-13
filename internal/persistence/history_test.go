@@ -88,6 +88,183 @@ func TestHistoryManagerRejectsUnsafeSessionIDs(t *testing.T) {
 		if err := manager.SaveSession(&ConversationSession{ID: id}); err == nil {
 			t.Errorf("SaveSession(%q) succeeded, want invalid ID error", id)
 		}
+		if err := manager.UpdateSessionMetadata(id, SessionMetadata{Title: "unsafe"}); err == nil {
+			t.Errorf("UpdateSessionMetadata(%q) succeeded, want invalid ID error", id)
+		}
+		if err := manager.DeleteSession(id); err == nil {
+			t.Errorf("DeleteSession(%q) succeeded, want invalid ID error", id)
+		}
+	}
+}
+
+func TestSessionMetadataRoundTripAndListSummary(t *testing.T) {
+	manager := NewHistoryManager(t.TempDir())
+	started := time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC)
+	session := &ConversationSession{
+		ID: "session_metadata", StartTime: started, Model: "gpt-5.6-luna",
+		Messages:  []intelligence.Message{{Role: "user", Content: "Explain the release notes"}, {Role: "assistant", Content: "Done"}},
+		Analytics: SessionAnalytics{APICallsCount: 3, ErrorCount: 1, OptimizationsUsed: 2},
+	}
+	if err := manager.SaveSession(session); err != nil {
+		t.Fatalf("SaveSession() error = %v", err)
+	}
+	savedStart, savedEnd, savedAnalytics := session.StartTime, session.EndTime, session.Analytics
+	metadata := SessionMetadata{Title: "Release notes", Tags: []string{"docs", "release"}, Favorite: true}
+	if err := manager.UpdateSessionMetadata(session.ID, metadata); err != nil {
+		t.Fatalf("UpdateSessionMetadata() error = %v", err)
+	}
+	loaded, err := manager.LoadSession(session.ID)
+	if err != nil {
+		t.Fatalf("LoadSession() error = %v", err)
+	}
+	if loaded.Title != metadata.Title || !reflect.DeepEqual(loaded.Tags, metadata.Tags) || !loaded.Favorite {
+		t.Fatalf("loaded metadata = title:%q tags:%v favorite:%t", loaded.Title, loaded.Tags, loaded.Favorite)
+	}
+	if !loaded.StartTime.Equal(savedStart) || !loaded.EndTime.Equal(savedEnd) || !reflect.DeepEqual(loaded.Analytics, savedAnalytics) {
+		t.Fatalf("metadata edit changed conversation facts: start=%s end=%s analytics=%+v; want start=%s end=%s analytics=%+v", loaded.StartTime, loaded.EndTime, loaded.Analytics, savedStart, savedEnd, savedAnalytics)
+	}
+	if len(loaded.Messages) != 2 || loaded.Messages[0].Content != "Explain the release notes" {
+		t.Fatalf("metadata edit changed transcript: %+v", loaded.Messages)
+	}
+	summaries, err := manager.ListSessionSummaries()
+	if err != nil {
+		t.Fatalf("ListSessionSummaries() error = %v", err)
+	}
+	if len(summaries) != 1 || summaries[0].Title != metadata.Title || !reflect.DeepEqual(summaries[0].Tags, metadata.Tags) || !summaries[0].Favorite {
+		t.Fatalf("session summary metadata = %+v, want %+v", summaries, metadata)
+	}
+}
+
+func TestLegacySessionTitleGetsGeneratedAndTagsDefaultEmptyAtReadTime(t *testing.T) {
+	dir := t.TempDir()
+	manager := NewHistoryManager(dir)
+	legacyData := []byte(`{"id":"legacy_session","start_time":"2024-10-13T00:00:00Z","model":"gpt","messages":[{"role":"user","content":"  Welcome\n back to DuckChat  "}],"analytics":{"message_count":1}}`)
+	path := filepath.Join(dir, "session_legacy_session.json")
+	if err := os.WriteFile(path, legacyData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := manager.LoadSession("legacy_session")
+	if err != nil {
+		t.Fatalf("LoadSession() error = %v", err)
+	}
+	if loaded.Title != "Welcome back to DuckChat" {
+		t.Fatalf("generated title = %q, want normalized first user message", loaded.Title)
+	}
+	if loaded.Tags == nil || len(loaded.Tags) != 0 {
+		t.Fatalf("legacy tags = %#v, want an empty slice", loaded.Tags)
+	}
+	summaries, err := manager.ListSessionSummaries()
+	if err != nil || len(summaries) != 1 || summaries[0].Title != loaded.Title {
+		t.Fatalf("ListSessionSummaries() = (%+v, %v), want generated title", summaries, err)
+	}
+	stored, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(stored), `"title"`) || strings.Contains(string(stored), `"tags"`) {
+		t.Fatalf("legacy archive was rewritten during a read: %s", stored)
+	}
+}
+
+func TestSessionMetadataNormalizesControlsAndDuplicateTags(t *testing.T) {
+	manager := NewHistoryManager(t.TempDir())
+	if err := manager.SaveSession(&ConversationSession{ID: "session_normalize", StartTime: time.Now(), Messages: []intelligence.Message{{Role: "user", Content: "Fallback"}}}); err != nil {
+		t.Fatal(err)
+	}
+	metadata := SessionMetadata{Title: "  Release\n  notes\x00 ", Tags: []string{" Go ", "go", "docs", " DOCS ", ""}}
+	if err := manager.UpdateSessionMetadata("session_normalize", metadata); err != nil {
+		t.Fatalf("UpdateSessionMetadata() error = %v", err)
+	}
+	loaded, err := manager.LoadSession("session_normalize")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Title != "Release notes" || !reflect.DeepEqual(loaded.Tags, []string{"Go", "docs"}) {
+		t.Fatalf("normalized metadata = title:%q tags:%v", loaded.Title, loaded.Tags)
+	}
+}
+
+func TestSessionMetadataRejectsValuesOutsideLimits(t *testing.T) {
+	manager := NewHistoryManager(t.TempDir())
+	if err := manager.SaveSession(&ConversationSession{ID: "session_limits", StartTime: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name     string
+		metadata SessionMetadata
+	}{
+		{name: "title length", metadata: SessionMetadata{Title: strings.Repeat("界", 101)}},
+		{name: "tag length", metadata: SessionMetadata{Tags: []string{strings.Repeat("界", 25)}}},
+		{name: "tag count", metadata: SessionMetadata{Tags: []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := manager.UpdateSessionMetadata("session_limits", tt.metadata); err == nil {
+				t.Fatal("UpdateSessionMetadata() succeeded for metadata outside limits")
+			}
+		})
+	}
+}
+
+func TestDeleteSessionRemovesCompressedAndUncompressedArchives(t *testing.T) {
+	dir := t.TempDir()
+	manager := NewHistoryManager(dir)
+	session := &ConversationSession{ID: "session_delete", StartTime: time.Now(), Messages: []intelligence.Message{{Role: "user", Content: "delete me"}}}
+	if err := manager.SaveSession(session); err != nil {
+		t.Fatal(err)
+	}
+	legacyPath := filepath.Join(dir, "session_session_delete.json")
+	if err := os.WriteFile(legacyPath, []byte(`{"id":"session_delete"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	compressedPath := filepath.Join(dir, "session_session_delete.json.gz")
+	if err := manager.DeleteSession(session.ID); err != nil {
+		t.Fatalf("DeleteSession() error = %v", err)
+	}
+	for _, path := range []string{compressedPath, legacyPath} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("archive %s still exists, stat error = %v", path, err)
+		}
+	}
+}
+
+func TestDeleteSessionRemovesUncompressedLegacyArchive(t *testing.T) {
+	dir := t.TempDir()
+	manager := NewHistoryManager(dir)
+	path := filepath.Join(dir, "session_legacy_delete.json")
+	if err := os.WriteFile(path, []byte(`{"id":"legacy_delete"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.DeleteSession("legacy_delete"); err != nil {
+		t.Fatalf("DeleteSession() error = %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("legacy archive still exists, stat error = %v", err)
+	}
+}
+
+func TestDeleteSessionReportsPartialRemovalFailure(t *testing.T) {
+	dir := t.TempDir()
+	manager := NewHistoryManager(dir)
+	session := &ConversationSession{ID: "session_partial_delete", StartTime: time.Now()}
+	if err := manager.SaveSession(session); err != nil {
+		t.Fatal(err)
+	}
+	legacyPath := filepath.Join(dir, "session_session_partial_delete.json")
+	if err := os.Mkdir(legacyPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyPath, "keep"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.DeleteSession(session.ID); err == nil {
+		t.Fatal("DeleteSession() claimed success while one archive path remained")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "session_session_partial_delete.json.gz")); !os.IsNotExist(err) {
+		t.Errorf("compressed archive was not removed despite partial failure: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(legacyPath, "keep")); err != nil {
+		t.Errorf("failed legacy removal unexpectedly altered its contents: %v", err)
 	}
 }
 
