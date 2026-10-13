@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"duckduckgo-chat-cli/internal/chatcontext"
 	"duckduckgo-chat-cli/internal/media"
 	"duckduckgo-chat-cli/internal/ui"
 )
@@ -43,6 +44,13 @@ func PrintHistory(c *Chat) {
 		}
 		for _, image := range msg.Images {
 			lines = append(lines, ui.PanelLine{{Text: "  " + imageAttachmentMarker(image), Style: ui.PanelMuted}})
+		}
+		for _, source := range msg.Sources {
+			state := source.State
+			if state == "" {
+				state = chatcontext.SourceStateActive
+			}
+			lines = append(lines, ui.PanelLine{{Text: fmt.Sprintf("  Source: %s (%s)", displaySourceName(source), state), Style: ui.PanelMuted}})
 		}
 		lines = append(lines, ui.PanelLine{{Text: "", Style: ui.PanelForeground}})
 	}

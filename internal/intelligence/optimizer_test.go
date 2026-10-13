@@ -1,12 +1,14 @@
 package intelligence
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
+	"duckduckgo-chat-cli/internal/chatcontext"
 	"duckduckgo-chat-cli/internal/media"
 )
 
@@ -114,4 +116,73 @@ func TestOptimizeContextAppliesRatioToOlderConversationMessages(t *testing.T) {
 	if optimized[len(optimized)-1].Content != "latest question" {
 		t.Fatalf("latest message changed to %q", optimized[len(optimized)-1].Content)
 	}
+}
+
+func TestOptimizationReportReportsCompressedTruncatedAndOmittedSources(t *testing.T) {
+	newSource := func(id string) chatcontext.SourceRef {
+		return chatcontext.SourceRef{ID: id, Kind: chatcontext.SourceKindFile, Name: id + ".txt", SizeBytes: 4000, State: chatcontext.SourceStateActive}
+	}
+
+	t.Run("compressed", func(t *testing.T) {
+		optimizer := NewContextOptimizer()
+		optimizer.ImportanceThreshold = 1.1
+		optimizer.MaxContextSize = 100_000
+		original := []Message{
+			{Role: "system", Content: strings.Repeat("same line\n", 200), Sources: []chatcontext.SourceRef{newSource("source-1")}},
+			{Role: "user", Content: "question"},
+		}
+		_, _, changes := optimizer.OptimizeContextWithReport(original)
+		change := optimizationChangeByID(t, changes, "source-1")
+		if change.State != chatcontext.SourceStateCompressed || change.BytesAfter >= change.BytesBefore {
+			t.Fatalf("compressed change = %+v, want compressed and shorter", change)
+		}
+	})
+
+	t.Run("truncated", func(t *testing.T) {
+		optimizer := NewContextOptimizer()
+		optimizer.ImportanceThreshold = 1.1
+		optimizer.MaxContextSize = 100_000
+		lines := make([]string, 0, 120)
+		for i := 0; i < 120; i++ {
+			lines = append(lines, fmt.Sprintf("unique line %03d with enough contextual detail to remain meaningful", i))
+		}
+		original := []Message{
+			{Role: "system", Content: strings.Join(lines, "\n"), Sources: []chatcontext.SourceRef{newSource("source-2")}},
+			{Role: "user", Content: "question"},
+		}
+		optimized, _, changes := optimizer.OptimizeContextWithReport(original)
+		change := optimizationChangeByID(t, changes, "source-2")
+		if change.State != chatcontext.SourceStateTruncated || change.BytesAfter >= change.BytesBefore {
+			t.Fatalf("truncated change = %+v, want truncated and shorter", change)
+		}
+		if !strings.Contains(optimized[0].Content, "[...]") {
+			t.Fatalf("optimized content = %q, want truncation marker", optimized[0].Content)
+		}
+	})
+
+	t.Run("omitted", func(t *testing.T) {
+		optimizer := NewContextOptimizer()
+		optimizer.ImportanceThreshold = 1.1
+		optimizer.MaxContextSize = 1
+		original := []Message{
+			{Role: "system", Content: "```text\n" + strings.Repeat("private source body ", 100) + "\n```", Sources: []chatcontext.SourceRef{newSource("source-3")}},
+			{Role: "user", Content: "q"},
+		}
+		_, _, changes := optimizer.OptimizeContextWithReport(original)
+		change := optimizationChangeByID(t, changes, "source-3")
+		if change.State != chatcontext.SourceStateOmitted || change.BytesAfter != 0 || change.BytesBefore == 0 {
+			t.Fatalf("omitted change = %+v, want omitted with zero retained bytes", change)
+		}
+	})
+}
+
+func optimizationChangeByID(t *testing.T, changes []OptimizationChange, id string) OptimizationChange {
+	t.Helper()
+	for _, change := range changes {
+		if change.SourceID == id {
+			return change
+		}
+	}
+	t.Fatalf("optimization report has no change for %s: %+v", id, changes)
+	return OptimizationChange{}
 }

@@ -1289,6 +1289,10 @@ func handleCommand(chatSession *chat.Chat, cfg *config.Config, cmd *command.Comm
 		}
 	case cmd.Type == "/history":
 		chat.PrintHistory(chatSession)
+	case cmd.Type == "/context":
+		chat.HandleContextCommand(chatSession)
+	case cmd.Type == "/sources":
+		chat.HandleSourcesCommand(chatSession)
 	case cmd.Type == "/image":
 		withResizeRedrawSuspended(chatSession, func() {
 			trackActivity("image", "Image generation", func() { chat.HandleImageCommand(chatSession, cmd.Args, cfg) })

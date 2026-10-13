@@ -76,6 +76,18 @@ func GetCommandRegistry() *CommandRegistry {
 				Usage:       "/history",
 				Category:    "core",
 			},
+			"/context": {
+				Name:        "/context",
+				Description: "Show retained context sources and approximate sizes",
+				Usage:       "/context",
+				Category:    "context",
+			},
+			"/sources": {
+				Name:        "/sources",
+				Description: "Show sources supplied with the latest exchange",
+				Usage:       "/sources",
+				Category:    "context",
+			},
 			"/search": {
 				Name:         "/search",
 				Description:  "Search with a query",
@@ -179,6 +191,7 @@ func GetCommandRegistry() *CommandRegistry {
 	}
 	for name, examples := range map[string][]string{
 		"/help": {"/help"}, "/exit": {"/exit"}, "/speak": {"/speak"}, "/image": {"/image", "/image a bird flying"}, "/issue": {"/issue"}, "/clear": {"/clear"}, "/history": {"/history"},
+		"/context": {"/context"}, "/sources": {"/sources"},
 		"/search":  {"/search Go concurrency", "/search Go concurrency -- Summarize the results"},
 		"/file":    {"/file ./README.md", "/file ./main.go -- Explain this code"},
 		"/library": {"/library", "/library add ./docs"},

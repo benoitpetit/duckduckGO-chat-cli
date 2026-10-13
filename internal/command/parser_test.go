@@ -162,3 +162,23 @@ func TestImageCommandRegistrationAndValidation(t *testing.T) {
 		t.Fatal("ValidateChainedCommand(image chain) succeeded, want a non-chainable error")
 	}
 }
+
+func TestContextInspectorCommandsRegisterAndParse(t *testing.T) {
+	registry := GetCommandRegistry()
+	for _, name := range []string{"/context", "/sources"} {
+		info, ok := registry.Commands[name]
+		if !ok {
+			t.Fatalf("%s is missing from the command registry", name)
+		}
+		if info.Category != "context" || info.Usage != name || info.RequiresArgs || info.IsChainable {
+			t.Errorf("%s metadata = %+v, want a read-only, no-argument context command", name, info)
+		}
+		parsed, err := Parse(name)
+		if err != nil {
+			t.Fatalf("Parse(%s): %v", name, err)
+		}
+		if err := ValidateCommand(parsed.Commands[0]); err != nil {
+			t.Errorf("ValidateCommand(%s): %v", name, err)
+		}
+	}
+}

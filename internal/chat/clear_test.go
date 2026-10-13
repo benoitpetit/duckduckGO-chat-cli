@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"duckduckgo-chat-cli/internal/chatcontext"
 	"duckduckgo-chat-cli/internal/config"
+	"duckduckgo-chat-cli/internal/intelligence"
 	"duckduckgo-chat-cli/internal/persistence"
 )
 
@@ -28,17 +30,18 @@ func TestClearResetsLocalStateWithoutCapturingBrowserProof(t *testing.T) {
 	jar.SetCookies(site, []*http.Cookie{{Name: "stale", Value: "session"}})
 
 	chatSession := &Chat{
-		Client:                &http.Client{Jar: jar},
-		CookieJar:             jar,
-		VqdHash1:              "stale-proof",
-		FeSignals:             "old-signals",
-		FeVersion:             "old-version",
-		NewVqd:                "old-vqd",
-		OldVqd:                "older-vqd",
-		Messages:              []Message{{Role: "user", Content: "hello"}},
-		SessionID:             "session_clear_test",
-		ConversationStartTime: time.Now(),
-		HistoryManager:        persistence.NewHistoryManager(t.TempDir()),
+		Client:                  &http.Client{Jar: jar},
+		CookieJar:               jar,
+		VqdHash1:                "stale-proof",
+		FeSignals:               "old-signals",
+		FeVersion:               "old-version",
+		NewVqd:                  "old-vqd",
+		OldVqd:                  "older-vqd",
+		Messages:                []Message{{Role: "user", Content: "hello"}},
+		LastOptimizationChanges: []intelligence.OptimizationChange{{SourceID: "source-1", State: chatcontext.SourceStateOmitted}},
+		SessionID:               "session_clear_test",
+		ConversationStartTime:   time.Now(),
+		HistoryManager:          persistence.NewHistoryManager(t.TempDir()),
 	}
 	if err := chatSession.Clear(&config.Config{ShowMenu: true}); err != nil {
 		t.Fatal(err)
@@ -46,6 +49,9 @@ func TestClearResetsLocalStateWithoutCapturingBrowserProof(t *testing.T) {
 
 	if len(chatSession.Messages) != 0 {
 		t.Fatalf("messages after Clear() = %d, want 0", len(chatSession.Messages))
+	}
+	if len(chatSession.LastOptimizationChanges) != 0 {
+		t.Fatalf("optimization changes after Clear() = %+v, want none", chatSession.LastOptimizationChanges)
 	}
 	if chatSession.VqdHash1 != "" || chatSession.FeSignals != "" || chatSession.FeVersion != "" || chatSession.NewVqd != "" || chatSession.OldVqd != "" {
 		t.Fatal("Clear() retained proof headers from the previous chat session")

@@ -36,6 +36,14 @@ type Message struct {
 	Compressed bool                    `json:"compressed"`
 }
 
+// OptimizationChange records how optimization changed the message carrying a source.
+type OptimizationChange struct {
+	SourceID    string
+	State       chatcontext.SourceState
+	BytesBefore int
+	BytesAfter  int
+}
+
 // ContextAnalysis provides insights about the current context
 type ContextAnalysis struct {
 	TotalMessages      int
@@ -97,8 +105,16 @@ func (co *ContextOptimizer) AnalyzeContext(messages []Message) *ContextAnalysis 
 	return analysis
 }
 
-// OptimizeContext performs intelligent context optimization
+// OptimizeContext performs intelligent context optimization.
 func (co *ContextOptimizer) OptimizeContext(messages []Message) ([]Message, int64) {
+	optimized, bytesSaved, _ := co.OptimizeContextWithReport(messages)
+	return optimized, bytesSaved
+}
+
+// OptimizeContextWithReport optimizes the conversation and reports source-bearing
+// messages whose content was shortened or removed.
+func (co *ContextOptimizer) OptimizeContextWithReport(messages []Message) ([]Message, int64, []OptimizationChange) {
+	originalMessages := append([]Message(nil), messages...)
 	originalSize := co.calculateTotalSize(messages)
 	messages = append([]Message(nil), messages...)
 	for i := range messages {
@@ -119,8 +135,82 @@ func (co *ContextOptimizer) OptimizeContext(messages []Message) ([]Message, int6
 
 	optimizedSize := co.calculateTotalSize(optimizedMessages)
 	bytesSaved := int64(originalSize - optimizedSize)
+	changes := optimizationChanges(originalMessages, optimizedMessages)
 
-	return optimizedMessages, bytesSaved
+	return optimizedMessages, bytesSaved, changes
+}
+
+func optimizationChanges(original, optimized []Message) []OptimizationChange {
+	optimizedBySequence := make(map[int]Message, len(optimized))
+	for _, message := range optimized {
+		optimizedBySequence[message.Sequence] = message
+	}
+
+	type changeSummary struct {
+		change OptimizationChange
+		order  int
+	}
+	summaries := make(map[string]changeSummary)
+	order := 0
+	for index, before := range original {
+		ids := make(map[string]bool)
+		for _, source := range before.Sources {
+			if source.ID == "" || ids[source.ID] {
+				continue
+			}
+			ids[source.ID] = true
+			after, retained := optimizedBySequence[index]
+			if retained && before.Content == after.Content {
+				continue
+			}
+
+			state := chatcontext.SourceStateOmitted
+			bytesAfter := 0
+			if retained {
+				state = chatcontext.SourceStateCompressed
+				bytesAfter = len(after.Content)
+				if strings.Count(after.Content, "[...]") > strings.Count(before.Content, "[...]") {
+					state = chatcontext.SourceStateTruncated
+				}
+			}
+			candidate := OptimizationChange{SourceID: source.ID, State: state, BytesBefore: len(before.Content), BytesAfter: bytesAfter}
+			if existing, ok := summaries[source.ID]; ok {
+				existing.change.BytesBefore += candidate.BytesBefore
+				existing.change.BytesAfter += candidate.BytesAfter
+				if optimizationStatePriority(candidate.State) > optimizationStatePriority(existing.change.State) {
+					existing.change.State = candidate.State
+				}
+				summaries[source.ID] = existing
+			} else {
+				summaries[source.ID] = changeSummary{change: candidate, order: order}
+				order++
+			}
+		}
+	}
+
+	ordered := make([]changeSummary, 0, len(summaries))
+	for _, summary := range summaries {
+		ordered = append(ordered, summary)
+	}
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].order < ordered[j].order })
+	changes := make([]OptimizationChange, len(ordered))
+	for i, summary := range ordered {
+		changes[i] = summary.change
+	}
+	return changes
+}
+
+func optimizationStatePriority(state chatcontext.SourceState) int {
+	switch state {
+	case chatcontext.SourceStateOmitted:
+		return 3
+	case chatcontext.SourceStateTruncated:
+		return 2
+	case chatcontext.SourceStateCompressed:
+		return 1
+	default:
+		return 0
+	}
 }
 
 // calculateImportanceScores assigns importance scores to messages

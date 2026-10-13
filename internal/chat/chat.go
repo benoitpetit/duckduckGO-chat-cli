@@ -42,22 +42,23 @@ import (
 )
 
 type Chat struct {
-	Activity       *activity.Hub
-	Display        *ConversationView
-	OldVqd         string
-	NewVqd         string
-	VqdHash1       string // x-vqd-hash-1 header (full VQD hash)
-	FeSignals      string // x-fe-signals header
-	FeVersion      string // x-fe-version header
-	Model          models.Model
-	Messages       []Message
-	PendingSources []chatcontext.SourceRef
-	pendingImages  []media.ImageAttachment
-	Client         *http.Client
-	BrowserRetry   BrowserRetryer
-	CookieJar      *cookiejar.Jar
-	LastHash       string
-	RetryCount     int
+	Activity                *activity.Hub
+	Display                 *ConversationView
+	OldVqd                  string
+	NewVqd                  string
+	VqdHash1                string // x-vqd-hash-1 header (full VQD hash)
+	FeSignals               string // x-fe-signals header
+	FeVersion               string // x-fe-version header
+	Model                   models.Model
+	Messages                []Message
+	PendingSources          []chatcontext.SourceRef
+	LastOptimizationChanges []intelligence.OptimizationChange
+	pendingImages           []media.ImageAttachment
+	Client                  *http.Client
+	BrowserRetry            BrowserRetryer
+	CookieJar               *cookiejar.Jar
+	LastHash                string
+	RetryCount              int
 
 	// New intelligent features
 	Analytics                  *analytics.ChatAnalytics
@@ -450,6 +451,7 @@ func (c *Chat) Clear(cfg *config.Config) error {
 	c.Messages = []Message{}
 	c.pendingImages = nil
 	c.PendingSources = nil
+	c.LastOptimizationChanges = nil
 	if c.Display != nil {
 		c.Display.Clear()
 	}
@@ -483,6 +485,7 @@ func clearTerminal() {
 }
 
 func ProcessInput(c *Chat, input string, cfg *config.Config) {
+	c.LastOptimizationChanges = nil
 	if c.processPendingCoordinate(input, cfg) {
 		return
 	}
@@ -492,6 +495,7 @@ func ProcessInput(c *Chat, input string, cfg *config.Config) {
 // ProcessInputWithContext submits command-chain context and the user's prompt
 // as one Duck.ai message while keeping their analytics roles separate.
 func ProcessInputWithContext(c *Chat, contextContent, prompt string, cfg *config.Config) {
+	c.LastOptimizationChanges = nil
 	input := contextContent
 	if prompt != "" {
 		if input != "" {
@@ -604,6 +608,54 @@ func cloneSourceRefs(sources []chatcontext.SourceRef) []chatcontext.SourceRef {
 	return append([]chatcontext.SourceRef(nil), sources...)
 }
 
+func applyOptimizationStates(messages []intelligence.Message, changes []intelligence.OptimizationChange) {
+	states := make(map[string]chatcontext.SourceState, len(changes))
+	for _, change := range changes {
+		states[change.SourceID] = change.State
+	}
+	for messageIndex := range messages {
+		for sourceIndex := range messages[messageIndex].Sources {
+			source := &messages[messageIndex].Sources[sourceIndex]
+			if state, ok := states[source.ID]; ok {
+				source.State = state
+			}
+		}
+	}
+}
+
+func contextOptimizationChanged(before, after []intelligence.Message) bool {
+	if len(before) != len(after) {
+		return true
+	}
+	afterBySequence := make(map[int]intelligence.Message, len(after))
+	for _, message := range after {
+		afterBySequence[message.Sequence] = message
+	}
+	for index, message := range before {
+		optimized, ok := afterBySequence[index]
+		if !ok || optimized.Role != message.Role || optimized.Content != message.Content {
+			return true
+		}
+	}
+	return false
+}
+
+func printOptimizationNotice(c *Chat, bytesSaved int64, changes []intelligence.OptimizationChange) {
+	if c == nil || c.Display == nil {
+		return
+	}
+	lines := []ui.PanelLine{{{Text: "Conversation context was automatically reduced.", Style: ui.PanelWarning}}}
+	if bytesSaved > 0 {
+		tokens := contextEstimateTokens(int(bytesSaved))
+		lines = append(lines, ui.PanelLine{{Text: fmt.Sprintf("About %d bytes saved (~%d tokens, approximate).", bytesSaved, tokens), Style: ui.PanelMuted}})
+	}
+	for _, change := range changes {
+		lines = append(lines, ui.PanelLine{{Text: fmt.Sprintf("%s · %s", change.SourceID, string(change.State)), Style: ui.PanelInfo}})
+	}
+	c.Display.RecordPanel("Context optimization", lines)
+	ui.PrintStyledPanelAtWidth("Context optimization", lines, ui.PanelContentWidth()+4)
+}
+
 // QueueImageAttachments keeps local image attachments for the next prompt.
 func (c *Chat) QueueImageAttachments(images []media.ImageAttachment) {
 	c.pendingImages = append(c.pendingImages, cloneImageAttachments(images)...)
@@ -676,6 +728,7 @@ func ProcessInputAndReturn(c *Chat, input string, cfg *config.Config) (string, e
 // interactive callers. The renderer is injected so the domain flow does not
 // depend on terminal output.
 func ProcessInputContext(ctx context.Context, c *Chat, input string, cfg *config.Config) (string, error) {
+	c.LastOptimizationChanges = nil
 	return processInput(ctx, c, input, cfg, renderStreamToString)
 }
 
@@ -742,8 +795,15 @@ func processInputWithStreamFetcherAndTokenRoles(ctx context.Context, c *Chat, in
 		Timestamp: time.Now(),
 	})
 
-	if c.ContextOptimizer != nil && c.ContextOptimizer.IsOptimizationNeeded(c.convertMessagesToIntelligence()) {
-		optimizedMessages, bytesSaved := c.ContextOptimizer.OptimizeContext(c.convertMessagesToIntelligence())
+	c.LastOptimizationChanges = nil
+	requestMessages := c.convertMessagesToIntelligence()
+	if c.ContextOptimizer != nil && c.ContextOptimizer.IsOptimizationNeeded(requestMessages) {
+		optimizedMessages, bytesSaved, changes := c.ContextOptimizer.OptimizeContextWithReport(requestMessages)
+		c.LastOptimizationChanges = changes
+		applyOptimizationStates(optimizedMessages, changes)
+		if contextOptimizationChanged(requestMessages, optimizedMessages) {
+			printOptimizationNotice(c, bytesSaved, changes)
+		}
 		c.Messages = c.convertFromIntelligenceMessages(optimizedMessages)
 		if c.Analytics != nil {
 			c.Analytics.RecordContextOptimization(bytesSaved)
