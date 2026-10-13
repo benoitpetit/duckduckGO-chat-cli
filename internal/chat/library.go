@@ -443,10 +443,11 @@ func handleLibraryLoad(c *Chat, cfg *config.Config, argument string, userRequest
 			break
 		}
 		message := libraryContextMessage(file, content)
-		c.addPendingSource(librarySourceRef(file, content))
+		source := c.addPendingSource(librarySourceRef(file, content))
 		c.Messages = append(c.Messages, Message{
 			Role:      "user",
 			Content:   message,
+			Sources:   []chatcontext.SourceRef{source},
 			Timestamp: time.Now(),
 		})
 		c.recordContextMessage(message)

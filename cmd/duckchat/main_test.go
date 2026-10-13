@@ -445,4 +445,7 @@ func TestCommandChainKeepsSourceWhenPromptIsDeferred(t *testing.T) {
 	if len(chatSession.PendingSources) != 1 || chatSession.PendingSources[0].Name != "notes.txt" {
 		t.Fatalf("deferred chain sources = %+v, want source retained until next turn", chatSession.PendingSources)
 	}
+	if len(chatSession.Messages) != 1 || len(chatSession.Messages[0].Sources) != 1 || chatSession.Messages[0].Sources[0] != chatSession.PendingSources[0] {
+		t.Fatalf("deferred context message sources = %+v, want same source reference as the pending turn", chatSession.Messages)
+	}
 }

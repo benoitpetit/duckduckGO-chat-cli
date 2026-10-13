@@ -145,10 +145,11 @@ func (c *Chat) addFileContext(path string, content []byte) {
 	}
 
 	message := fmt.Sprintf("[File Context]\nFile: %s\n\n%s", filepath.Base(path), string(content))
-	c.addPendingSource(chatcontext.SourceRef{Kind: chatcontext.SourceKindFile, Name: filepath.Base(path), URI: path, SizeBytes: len(content), State: chatcontext.SourceStateActive})
+	source := c.addPendingSource(chatcontext.SourceRef{Kind: chatcontext.SourceKindFile, Name: filepath.Base(path), URI: path, SizeBytes: len(content), State: chatcontext.SourceStateActive})
 	c.Messages = append(c.Messages, Message{
 		Role:      "user",
 		Content:   message,
+		Sources:   []chatcontext.SourceRef{source},
 		Timestamp: time.Now(),
 	})
 	c.recordContextMessage(message)

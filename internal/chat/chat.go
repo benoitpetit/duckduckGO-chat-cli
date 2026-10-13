@@ -568,8 +568,9 @@ func (c *Chat) clearRequestCancel() {
 }
 
 // AddPendingSources associates source references with the next submitted user turn.
-func (c *Chat) AddPendingSources(sources []chatcontext.SourceRef) {
+func (c *Chat) AddPendingSources(sources []chatcontext.SourceRef) []chatcontext.SourceRef {
 	next := 1
+	added := make([]chatcontext.SourceRef, 0, len(sources))
 	for _, message := range c.Messages {
 		for _, source := range message.Sources {
 			if number, err := strconv.Atoi(strings.TrimPrefix(source.ID, "source-")); err == nil && number >= next {
@@ -588,12 +589,15 @@ func (c *Chat) AddPendingSources(sources []chatcontext.SourceRef) {
 			source.State = chatcontext.SourceStateActive
 		}
 		c.PendingSources = append(c.PendingSources, source)
+		added = append(added, source)
 		next++
 	}
+	return added
 }
 
-func (c *Chat) addPendingSource(source chatcontext.SourceRef) {
-	c.AddPendingSources([]chatcontext.SourceRef{source})
+func (c *Chat) addPendingSource(source chatcontext.SourceRef) chatcontext.SourceRef {
+	added := c.AddPendingSources([]chatcontext.SourceRef{source})
+	return added[0]
 }
 
 func cloneSourceRefs(sources []chatcontext.SourceRef) []chatcontext.SourceRef {
@@ -1871,10 +1875,11 @@ func (c *Chat) AddURLContext(url string) error {
 	}
 
 	message := fmt.Sprintf("[URL Context]\nURL: %s\n\n%s", url, content.Content)
-	c.addPendingSource(chatcontext.SourceRef{Kind: chatcontext.SourceKindURL, Name: url, URI: url, SizeBytes: len(content.Content), State: chatcontext.SourceStateActive})
+	source := c.addPendingSource(chatcontext.SourceRef{Kind: chatcontext.SourceKindURL, Name: url, URI: url, SizeBytes: len(content.Content), State: chatcontext.SourceStateActive})
 	c.Messages = append(c.Messages, Message{
 		Role:      "user",
 		Content:   message,
+		Sources:   []chatcontext.SourceRef{source},
 		Timestamp: time.Now(),
 	})
 	c.recordContextMessage(message)
@@ -2119,10 +2124,11 @@ func (c *Chat) addURLContext(url string, content string) {
 	}
 
 	message := fmt.Sprintf("[URL Context]\nURL: %s\n\n%s", url, content)
-	c.addPendingSource(chatcontext.SourceRef{Kind: chatcontext.SourceKindURL, Name: url, URI: url, SizeBytes: len(content), State: chatcontext.SourceStateActive})
+	source := c.addPendingSource(chatcontext.SourceRef{Kind: chatcontext.SourceKindURL, Name: url, URI: url, SizeBytes: len(content), State: chatcontext.SourceStateActive})
 	c.Messages = append(c.Messages, Message{
 		Role:      "user",
 		Content:   message,
+		Sources:   []chatcontext.SourceRef{source},
 		Timestamp: time.Now(),
 	})
 	c.recordContextMessage(message)
@@ -2282,6 +2288,7 @@ func (c *Chat) AddContextMessageWithImages(content string, images []media.ImageA
 		Role:      "user",
 		Content:   content,
 		Images:    cloneImageAttachments(images),
+		Sources:   cloneSourceRefs(c.PendingSources),
 		Timestamp: time.Now(),
 	})
 	c.recordContextMessage(content)

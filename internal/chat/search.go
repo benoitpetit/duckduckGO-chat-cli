@@ -59,12 +59,13 @@ func HandleSearchCommand(c *Chat, input string, cfg *config.Config, chainCtx *ch
 		color.Green("Added %d search results to the chain context", len(results))
 	} else {
 		message := fmt.Sprintf("[Search Context]\n%s", contextMsg)
+		addedSources := c.AddPendingSources(sources)
 		c.Messages = append(c.Messages, Message{
 			Role:      "user",
 			Content:   message,
+			Sources:   cloneSourceRefs(addedSources),
 			Timestamp: time.Now(),
 		})
-		c.AddPendingSources(sources)
 		c.recordContextMessage(message)
 
 		if c.Analytics != nil {

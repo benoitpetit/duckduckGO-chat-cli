@@ -260,6 +260,9 @@ func TestAddedFileRecordsPrivateURIAndShortDisplayName(t *testing.T) {
 	if source.Kind != chatcontext.SourceKindFile || source.Name != "notes.txt" || source.URI != path || source.SizeBytes != len(content) || source.State != chatcontext.SourceStateActive {
 		t.Fatalf("file source = %+v, want short name and full internal URI", source)
 	}
+	if len(c.Messages) != 1 || len(c.Messages[0].Sources) != 1 || c.Messages[0].Sources[0] != source {
+		t.Fatalf("stored file context sources = %+v, want the pending source on its context message", c.Messages)
+	}
 }
 
 func TestPendingSourcesRestoreAfterFailedInputAndConsumeOnSuccessfulTurn(t *testing.T) {
@@ -333,5 +336,8 @@ func TestAddedURLRecordsSourceForNextTurn(t *testing.T) {
 	source := c.PendingSources[0]
 	if source.Kind != chatcontext.SourceKindURL || source.Name != "https://example.test/guide" || source.URI != source.Name || source.SizeBytes != len("page text") {
 		t.Fatalf("URL source = %+v", source)
+	}
+	if len(c.Messages) != 1 || len(c.Messages[0].Sources) != 1 || c.Messages[0].Sources[0] != source {
+		t.Fatalf("stored URL context sources = %+v, want the pending source on its context message", c.Messages)
 	}
 }
