@@ -86,6 +86,62 @@ func TestPromptScrollbarUsesThemeAccentAndSurface(t *testing.T) {
 	}
 }
 
+func TestParseCLIOptionsAcceptsRepeatedOneShotContext(t *testing.T) {
+	options, err := parseCLIOptions([]string{
+		"--prompt", "summarize these sources",
+		"--file", "first.txt", "--file", "second.pdf",
+		"--url", "https://example.com/a", "--url", "http://example.org/b",
+		"--search", "first query", "--search", "second query",
+	})
+	if err != nil {
+		t.Fatalf("parse context options: %v", err)
+	}
+	if !reflect.DeepEqual(options.files, []string{"first.txt", "second.pdf"}) {
+		t.Fatalf("files = %v", options.files)
+	}
+	if !reflect.DeepEqual(options.urls, []string{"https://example.com/a", "http://example.org/b"}) {
+		t.Fatalf("URLs = %v", options.urls)
+	}
+	if !reflect.DeepEqual(options.searches, []string{"first query", "second query"}) {
+		t.Fatalf("searches = %v", options.searches)
+	}
+}
+
+func TestParseCLIOptionsRejectsInvalidOneShotContext(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "file requires prompt", args: []string{"--file", "notes.txt"}, want: "--prompt"},
+		{name: "URL requires prompt", args: []string{"--url", "https://example.com"}, want: "--prompt"},
+		{name: "search requires prompt", args: []string{"--search", "query"}, want: "--prompt"},
+		{name: "empty file", args: []string{"--prompt", "question", "--file", ""}, want: "--file"},
+		{name: "empty search", args: []string{"--prompt", "question", "--search", "  "}, want: "--search"},
+		{name: "invalid URL scheme", args: []string{"--prompt", "question", "--url", "ftp://example.com"}, want: "--url"},
+		{name: "URL without host", args: []string{"--prompt", "question", "--url", "https:///page"}, want: "--url"},
+		{name: "URL with credentials", args: []string{"--prompt", "question", "--url", "https://user:pass@example.com"}, want: "--url"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := parseCLIOptions(test.args)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("parse error = %v, want error containing %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestParseCLIOptionsContextCanReadPromptFromStdin(t *testing.T) {
+	options, err := parseCLIOptions([]string{"--prompt", "-", "--file", "notes.txt"})
+	if err != nil {
+		t.Fatalf("parse stdin prompt with file context: %v", err)
+	}
+	if options.prompt != "-" || len(options.files) != 1 {
+		t.Fatalf("parsed options = %#v", options)
+	}
+}
+
 func contrastRatio(foreground, background string) float64 {
 	firstLum := relativeLuminance(foreground)
 	secondLum := relativeLuminance(background)

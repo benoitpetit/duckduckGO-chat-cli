@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"runtime"
@@ -450,21 +451,42 @@ type cliOptions struct {
 	prompt     string
 	promptSet  bool
 	model      string
+	files      []string
+	urls       []string
+	searches   []string
+}
+
+type repeatedStringFlag []string
+
+func (values *repeatedStringFlag) String() string {
+	return strings.Join(*values, ",")
+}
+
+func (values *repeatedStringFlag) Set(value string) error {
+	*values = append(*values, value)
+	return nil
 }
 
 func parseCLIOptions(args []string) (cliOptions, error) {
 	var options cliOptions
 	flags := flag.NewFlagSet("duckchat", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
+	var files, urls, searches repeatedStringFlag
 	flags.BoolVar(&options.help, "help", false, "Show this help message")
 	flags.BoolVar(&options.help, "h", false, "Show this help message")
 	flags.BoolVar(&options.version, "version", false, "Show version information")
 	flags.BoolVar(&options.jsonOutput, "json", false, "Output one-shot response as JSON")
 	flags.StringVar(&options.prompt, "prompt", "", "Send one prompt and exit; use - to read from stdin")
 	flags.StringVar(&options.model, "model", "", "Select a model for --prompt")
+	flags.Var(&files, "file", "Add a local text, PDF, or image file as context (repeatable)")
+	flags.Var(&urls, "url", "Add a web page as context (repeatable)")
+	flags.Var(&searches, "search", "Add web search results as context (repeatable)")
 	if err := flags.Parse(args); err != nil {
 		return options, err
 	}
+	options.files = files
+	options.urls = urls
+	options.searches = searches
 	if flags.NArg() != 0 {
 		return options, fmt.Errorf("unexpected positional argument %q", flags.Arg(0))
 	}
@@ -480,8 +502,27 @@ func parseCLIOptions(args []string) (cliOptions, error) {
 	if options.jsonOutput && !options.promptSet {
 		return options, fmt.Errorf("--json can only be used with --prompt")
 	}
+	if (len(options.files) > 0 || len(options.urls) > 0 || len(options.searches) > 0) && !options.promptSet {
+		return options, fmt.Errorf("--file, --url, and --search can only be used with --prompt")
+	}
 	if options.promptSet && options.prompt != "-" && strings.TrimSpace(options.prompt) == "" {
 		return options, fmt.Errorf("--prompt cannot be empty")
+	}
+	for _, path := range options.files {
+		if strings.TrimSpace(path) == "" {
+			return options, fmt.Errorf("--file cannot be empty")
+		}
+	}
+	for _, rawURL := range options.urls {
+		parsed, err := url.Parse(strings.TrimSpace(rawURL))
+		if err != nil || parsed.Hostname() == "" || parsed.User != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return options, fmt.Errorf("--url must be an HTTP(S) URL with a host and no credentials: %q", rawURL)
+		}
+	}
+	for _, query := range options.searches {
+		if strings.TrimSpace(query) == "" {
+			return options, fmt.Errorf("--search cannot be empty")
+		}
 	}
 	if options.model != "" {
 		if _, ok := models.ResolveModel(options.model); !ok {
@@ -506,6 +547,9 @@ func printCLIUsage(out io.Writer) {
 		command("--version", "Show version information"),
 		command("--prompt TEXT", "Send one prompt and exit; use - to read from stdin"),
 		command("--model ID", "Select a model for --prompt"),
+		command("--file PATH", "Add a local text, PDF, or image context (repeatable)"),
+		command("--url URL", "Add a web page as context (repeatable)"),
+		command("--search QUERY", "Add web search results as context (repeatable)"),
 		command("--json", "Output one-shot response as JSON"),
 		"",
 		accent("Interactive chat:"),
