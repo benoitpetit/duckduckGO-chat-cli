@@ -368,3 +368,57 @@ func TestRateLimitConfigJSONRoundTrip(t *testing.T) {
 		t.Fatalf("RateLimit config round trip = %+v, want %+v", got.RateLimit, want)
 	}
 }
+
+func TestReadOnlyDiagnosticsConfigDoesNotCreateConfig(t *testing.T) {
+	root := t.TempDir()
+	configHome := filepath.Join(root, "missing-config-home")
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("HOME", root)
+
+	cfg, path, err := ReadOnlyDiagnosticsConfig()
+	if err != nil {
+		t.Fatalf("ReadOnlyDiagnosticsConfig() error = %v", err)
+	}
+	if path != filepath.Join(configHome, "duckduckgo-chat-cli", "config.json") {
+		t.Fatalf("path = %q, want config location under XDG_CONFIG_HOME", path)
+	}
+	if cfg.DefaultModel == "" {
+		t.Fatal("default model is empty")
+	}
+	if _, err := os.Stat(configHome); !os.IsNotExist(err) {
+		t.Fatalf("diagnostics created config home: stat error = %v", err)
+	}
+}
+
+func TestReadOnlyDiagnosticsConfigReadsExistingConfig(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", root)
+	t.Setenv("HOME", root)
+	configDir := filepath.Join(root, "duckduckgo-chat-cli")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(configDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"tos_accepted":true,"default_model":"gpt-5.6-luna"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, path, err := ReadOnlyDiagnosticsConfig()
+	if err != nil {
+		t.Fatalf("ReadOnlyDiagnosticsConfig() error = %v", err)
+	}
+	if path != configPath || !cfg.TOSAccepted || cfg.DefaultModel != "gpt-5.6-luna" {
+		t.Fatalf("ReadOnlyDiagnosticsConfig() = (%+v, %q), unexpected config", cfg, path)
+	}
+	after, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("diagnostics changed the config file")
+	}
+}

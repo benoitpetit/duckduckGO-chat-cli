@@ -286,8 +286,8 @@ func normalizeAppearanceConfig(cfg *AppearanceConfig) {
 	cfg.Theme = string(theme.ID)
 }
 
-func loadConfig() *Config {
-	cfg := &Config{
+func defaultConfig() *Config {
+	return &Config{
 		TOSAccepted:      false,
 		DefaultModel:     string(models.Default()),
 		ExportDir:        defaultExportPath(),
@@ -302,6 +302,10 @@ func loadConfig() *Config {
 		Dashboard:        defaultDashboardConfig(),
 		Prompts:          make(map[string]string),
 	}
+}
+
+func loadConfig() *Config {
+	cfg := defaultConfig()
 
 	if data, err := os.ReadFile(configPath()); err == nil {
 		if err := json.Unmarshal(data, cfg); err != nil {
@@ -313,6 +317,27 @@ func loadConfig() *Config {
 		cfg.Prompts = make(map[string]string)
 	}
 	return cfg
+}
+
+// ReadOnlyDiagnosticsConfig loads existing settings for diagnostics without
+// creating directories, normalizing the user's choices, or saving defaults.
+func ReadOnlyDiagnosticsConfig() (Config, string, error) {
+	path := configPath()
+	cfg := defaultConfig()
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return *cfg, path, nil
+	}
+	if err != nil {
+		return *cfg, path, err
+	}
+	if err := json.Unmarshal(data, cfg); err != nil {
+		return *cfg, path, fmt.Errorf("failed to parse config file: %w", err)
+	}
+	if cfg.Prompts == nil {
+		cfg.Prompts = make(map[string]string)
+	}
+	return *cfg, path, nil
 }
 
 func defaultExportPath() string {
