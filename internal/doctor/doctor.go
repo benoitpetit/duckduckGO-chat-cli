@@ -19,7 +19,7 @@ const (
 	StatusFail    Status = "fail"
 	StatusSkipped Status = "skipped"
 
-	minimumRecommendedBrowserMajor = 120
+	minimumRecommendedBrowserMajor = 115
 	browserVersionTimeout          = 3 * time.Second
 	networkProbeTimeout            = 10 * time.Second
 )

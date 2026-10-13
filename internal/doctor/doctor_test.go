@@ -103,7 +103,7 @@ func TestRunReportsMissingBrowserWithoutNetworkProbe(t *testing.T) {
 func TestRunWarnsOnOldBrowserVersion(t *testing.T) {
 	deps, _ := dependenciesForRun(t)
 	deps.BrowserVersion = func(context.Context, string) (string, error) {
-		return "Chromium 119.0.0.0", nil
+		return "Chromium 114.0.0.0", nil
 	}
 
 	result := Run(context.Background(), Options{}, deps)
@@ -212,5 +212,18 @@ func TestRunNetworkProbeIsOptInAndBounded(t *testing.T) {
 	Run(context.Background(), Options{Network: true}, deps)
 	if !called {
 		t.Fatal("opt-in network probe was not called")
+	}
+}
+
+func TestRunAcceptsDocumentedBrowserVersionFloor(t *testing.T) {
+	deps, _ := dependenciesForRun(t)
+	deps.BrowserVersion = func(context.Context, string) (string, error) {
+		return "Google Chrome 115.0.0.0", nil
+	}
+
+	result := Run(context.Background(), Options{}, deps)
+	check, ok := findCheck(result, "browser_version")
+	if !ok || check.Status != StatusPass {
+		t.Fatalf("browser_version check = %+v, present %v; want pass at documented floor 115", check, ok)
 	}
 }
