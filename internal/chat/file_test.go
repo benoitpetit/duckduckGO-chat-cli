@@ -18,6 +18,7 @@ import (
 	"duckduckgo-chat-cli/internal/intelligence"
 	"duckduckgo-chat-cli/internal/media"
 	"duckduckgo-chat-cli/internal/models"
+	"github.com/giraffesyo/pdf/pdftest"
 )
 
 var testPNG = func() []byte {
@@ -217,6 +218,106 @@ func TestInvalidImageFileDoesNotInvokeProcessor(t *testing.T) {
 	if called || len(c.pendingImages) != 0 || len(c.Messages) != 0 {
 		t.Fatalf("invalid image had side effects: processor called=%t pending=%d messages=%+v", called, len(c.pendingImages), c.Messages)
 	}
+}
+
+func TestFileCommandReadsPDFPagesWithLabels(t *testing.T) {
+	path := copyPDFFixture(t, "two_pages.pdf")
+	c := &Chat{}
+	if err := handleFileCommand(c, "/file "+path, &config.Config{}, nil, func(*Chat, string, *config.Config) {}); err != nil {
+		t.Fatalf("handleFileCommand() error = %v", err)
+	}
+	if len(c.Messages) != 1 || !strings.Contains(c.Messages[0].Content, "[Page 1]") || !strings.Contains(c.Messages[0].Content, "[Page 2]") || !strings.Contains(c.Messages[0].Content, "Beta café second page") {
+		t.Fatalf("PDF context message = %+v, want both ordered page labels and text", c.Messages)
+	}
+	if len(c.PendingSources) != 1 || c.PendingSources[0].Name != "report.pdf" || c.PendingSources[0].Kind != chatcontext.SourceKindFile {
+		t.Fatalf("PDF source references = %+v, want one file source", c.PendingSources)
+	}
+}
+
+func TestFileCommandProcessesPDFQuestionAfterStagingContext(t *testing.T) {
+	path := copyPDFFixture(t, "two_pages.pdf")
+	c := &Chat{}
+	called := false
+	err := handleFileCommand(c, "/file "+path+" -- summarize this report", &config.Config{}, nil, func(chat *Chat, prompt string, _ *config.Config) {
+		called = true
+		if prompt != "summarize this report" {
+			t.Errorf("processor prompt = %q, want %q", prompt, "summarize this report")
+		}
+		if len(chat.Messages) != 1 || !strings.Contains(chat.Messages[0].Content, "[Page 2]") {
+			t.Errorf("context at processor call = %+v, want complete PDF context staged first", chat.Messages)
+		}
+	})
+	if err != nil {
+		t.Fatalf("handleFileCommand() error = %v", err)
+	}
+	if !called {
+		t.Fatal("processor was not called for a PDF question")
+	}
+}
+
+func TestFileCommandPDFErrorsDoNotMutateContext(t *testing.T) {
+	oversized := copyPDFFixture(t, "two_pages.pdf")
+	if err := os.Truncate(oversized, maxTextFileSize+1); err != nil {
+		t.Fatal(err)
+	}
+	encrypted := writeEncryptedPDFFixture(t)
+	tests := []struct {
+		name        string
+		path        string
+		wantErrText string
+	}{
+		{name: "empty text", path: copyPDFFixture(t, "empty_page.pdf"), wantErrText: "no extractable text"},
+		{name: "encrypted", path: encrypted, wantErrText: "password-protected PDFs are not supported"},
+		{name: "malformed", path: copyPDFFixture(t, "malformed.pdf"), wantErrText: "invalid or unsupported PDF"},
+		{name: "oversized", path: oversized, wantErrText: "exceeds the 10 MiB limit"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Chat{}
+			chain := chatcontext.New()
+			called := false
+			err := handleFileCommand(c, "/file "+tt.path+" -- summarize this", &config.Config{}, chain, func(*Chat, string, *config.Config) {
+				called = true
+			})
+			if err == nil || !strings.Contains(err.Error(), tt.wantErrText) {
+				t.Fatalf("handleFileCommand() error = %v, want text %q", err, tt.wantErrText)
+			}
+			if called || len(c.Messages) != 0 || len(c.PendingSources) != 0 || !chain.IsEmpty() {
+				t.Fatalf("failed PDF import mutated state: called=%t messages=%+v sources=%+v chain=%q", called, c.Messages, c.PendingSources, chain.String())
+			}
+		})
+	}
+}
+
+func copyPDFFixture(t *testing.T, name string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("testdata", "pdf", name))
+	if err != nil {
+		t.Fatalf("read PDF fixture %s: %v", name, err)
+	}
+	path := filepath.Join(t.TempDir(), "report.pdf")
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatalf("write PDF fixture %s: %v", name, err)
+	}
+	return path
+}
+
+func writeEncryptedPDFFixture(t *testing.T) string {
+	t.Helper()
+	data := pdftest.BuildEncrypted(1, pdftest.EncryptSpec{
+		R: 4, AES: true, UserPassword: "secret", OwnerPassword: "owner",
+	},
+		pdftest.Catalog(2),
+		pdftest.Pages(3),
+		pdftest.Page(2, 4, "<< /Font << /F1 5 0 R >> >>"),
+		pdftest.Stream("", "BT /F1 12 Tf 72 700 Td (protected) Tj ET"),
+		pdftest.Helvetica(),
+	)
+	path := filepath.Join(t.TempDir(), "protected.pdf")
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatalf("write encrypted PDF fixture: %v", err)
+	}
+	return path
 }
 
 func TestImageRequestsUseVisionCapableDuckAIModel(t *testing.T) {

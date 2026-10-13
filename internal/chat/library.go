@@ -4,6 +4,7 @@ import (
 	"duckduckgo-chat-cli/internal/chatcontext"
 	"duckduckgo-chat-cli/internal/config"
 	"duckduckgo-chat-cli/internal/ui"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -16,6 +17,8 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/fatih/color"
 )
+
+var errLibraryContextLimit = errors.New("library context limit exceeded")
 
 // SupportedExtensions contains the file extensions that can be read as text
 var SupportedExtensions = map[string]bool{
@@ -50,6 +53,7 @@ var SupportedExtensions = map[string]bool{
 	".rb":   true,
 	".pl":   true,
 	".r":    true,
+	".pdf":  true,
 }
 
 type LibraryInfo struct {
@@ -430,35 +434,16 @@ func handleLibraryLoad(c *Chat, cfg *config.Config, argument string, userRequest
 		return
 	}
 
-	// Add selected files to context
-	var totalChars int
-	for _, file := range files {
-		content, err := readTextContextFile(file)
-		if err != nil {
-			ui.Errorln("Failed to read file %s: %v", file, err)
-			continue
-		}
-		if totalChars+len(content) > maxLibraryContextSize {
-			ui.Warningln("Skipping %s: library context limit of %d MiB reached", file, maxLibraryContextSize/(1<<20))
-			break
-		}
-		message := libraryContextMessage(file, content)
-		source := c.addPendingSource(librarySourceRef(file, content))
-		c.Messages = append(c.Messages, Message{
-			Role:      "user",
-			Content:   message,
-			Sources:   []chatcontext.SourceRef{source},
-			Timestamp: time.Now(),
-		})
-		c.recordContextMessage(message)
-		totalChars += len(content)
-
-		if c.Analytics != nil {
-			c.Analytics.RecordFileProcessed()
-		}
+	loaded, totalChars, skipped, err := loadLibraryFiles(c, files)
+	for _, skipErr := range skipped {
+		ui.Errorln("%v", skipErr)
+	}
+	if err != nil {
+		ui.Errorln("Failed to load library files: %v", err)
+		return
 	}
 
-	ui.AIln("✅ Added %d files (%d characters) to context.", len(files), totalChars)
+	ui.AIln("✅ Added %d files (%d characters) to context.", loaded, totalChars)
 
 	// If user provided a specific request, process it
 	if userRequest != "" {
@@ -467,6 +452,49 @@ func handleLibraryLoad(c *Chat, cfg *config.Config, argument string, userRequest
 	} else {
 		ui.Warningln("File contents added to context.")
 	}
+}
+
+type libraryContextFile struct {
+	path    string
+	content []byte
+}
+
+// loadLibraryFiles reads and validates every selected file before mutating the
+// chat. A bad PDF or aggregate limit failure therefore cannot leave partial
+// library context behind; unreadable ordinary text files remain skippable.
+func loadLibraryFiles(c *Chat, files []string) (loaded int, totalBytes int, skipped []error, err error) {
+	staged := make([]libraryContextFile, 0, len(files))
+	for _, file := range files {
+		content, readErr := readContextFile(file)
+		if readErr != nil {
+			if strings.EqualFold(filepath.Ext(file), ".pdf") {
+				return 0, 0, skipped, fmt.Errorf("%s: %w", file, readErr)
+			}
+			skipped = append(skipped, fmt.Errorf("Failed to read file %s: %w", file, readErr))
+			continue
+		}
+		if len(content) > maxLibraryContextSize-totalBytes {
+			return 0, 0, skipped, fmt.Errorf("%w: %s exceeds the %d MiB aggregate limit", errLibraryContextLimit, file, maxLibraryContextSize/(1<<20))
+		}
+		staged = append(staged, libraryContextFile{path: file, content: content})
+		totalBytes += len(content)
+	}
+
+	for _, file := range staged {
+		message := libraryContextMessage(file.path, file.content)
+		source := c.addPendingSource(librarySourceRef(file.path, file.content))
+		c.Messages = append(c.Messages, Message{
+			Role:      "user",
+			Content:   message,
+			Sources:   []chatcontext.SourceRef{source},
+			Timestamp: time.Now(),
+		})
+		c.recordContextMessage(message)
+		if c.Analytics != nil {
+			c.Analytics.RecordFileProcessed()
+		}
+	}
+	return len(staged), totalBytes, skipped, nil
 }
 
 // selectLibrary allows the user to choose a library interactively or by name/number.

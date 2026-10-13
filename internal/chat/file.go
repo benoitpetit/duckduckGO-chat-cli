@@ -2,6 +2,8 @@ package chat
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"mime"
 	"os"
@@ -14,6 +16,7 @@ import (
 	"duckduckgo-chat-cli/internal/config"
 	"duckduckgo-chat-cli/internal/media"
 	"duckduckgo-chat-cli/internal/ui"
+	"github.com/giraffesyo/pdf"
 )
 
 const maxTextFileSize = 10 << 20
@@ -84,7 +87,7 @@ func handleFileCommand(c *Chat, input string, cfg *config.Config, chainCtx *chat
 		return nil
 	}
 
-	content, err := readTextContextFile(path)
+	content, err := readContextFile(path)
 	if err != nil {
 		ui.Errorln("File error: %v", err)
 		return err
@@ -136,6 +139,64 @@ func readTextContextFile(path string) ([]byte, error) {
 		return nil, fmt.Errorf("%s is not a supported text file", path)
 	}
 	return content, nil
+}
+
+func readContextFile(path string) ([]byte, error) {
+	if strings.EqualFold(filepath.Ext(path), ".pdf") {
+		return readPDFContextFile(path)
+	}
+	return readTextContextFile(path)
+}
+
+func readPDFContextFile(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("%s is a directory", path)
+	}
+	if info.Size() > maxTextFileSize {
+		return nil, fmt.Errorf("%s exceeds the %d MiB limit", path, maxTextFileSize/(1<<20))
+	}
+
+	pages, err := extractPDFPages(context.Background(), file, info.Size(), maxTextFileSize)
+	if err != nil {
+		switch {
+		case errors.Is(err, pdf.ErrPasswordRequired):
+			return nil, fmt.Errorf("%s: password-protected PDFs are not supported: %w", path, err)
+		case errors.Is(err, errPDFExtractionLimit):
+			return nil, fmt.Errorf("%s exceeds the %d MiB limit for extracted PDF text", path, maxTextFileSize/(1<<20))
+		default:
+			return nil, fmt.Errorf("%s is an invalid or unsupported PDF: %w", path, err)
+		}
+	}
+
+	var content strings.Builder
+	hasText := false
+	for _, page := range pages {
+		if strings.TrimSpace(page.Text) != "" {
+			hasText = true
+		}
+		pageHeader := fmt.Sprintf("[Page %d]\n", page.Number)
+		pageBytes := len(pageHeader) + len(page.Text) + 1
+		if pageBytes > maxTextFileSize-content.Len() {
+			return nil, fmt.Errorf("%w: %s exceeds the %d MiB limit including page labels", errPDFExtractionLimit, path, maxTextFileSize/(1<<20))
+		}
+		content.WriteString(pageHeader)
+		content.WriteString(page.Text)
+		content.WriteByte('\n')
+	}
+	if !hasText {
+		return nil, fmt.Errorf("%s has no extractable text; scanned PDFs are not OCR'd", path)
+	}
+	return []byte(content.String()), nil
 }
 
 func (c *Chat) addFileContext(path string, content []byte) {
