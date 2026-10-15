@@ -54,7 +54,7 @@ jobs:
       run: go build -ldflags "-X main.Version=v${VERSION} -X duckduckgo-chat-cli/internal/version.Current=${VERSION}" -o "duckduckgo-chat-cli_v${VERSION}_darwin_${GOARCH}" ./cmd/duckchat
 
     - name: Upload macOS CLI
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: duckchat-darwin-${{ matrix.arch }}
         path: |
