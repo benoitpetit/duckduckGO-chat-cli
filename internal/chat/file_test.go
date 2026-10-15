@@ -18,6 +18,7 @@ import (
 	"duckduckgo-chat-cli/internal/intelligence"
 	"duckduckgo-chat-cli/internal/media"
 	"duckduckgo-chat-cli/internal/models"
+
 	"github.com/giraffesyo/pdf/pdftest"
 )
 

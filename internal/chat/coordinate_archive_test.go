@@ -13,6 +13,7 @@ import (
 	"duckduckgo-chat-cli/internal/analytics"
 	"duckduckgo-chat-cli/internal/models"
 	"duckduckgo-chat-cli/internal/persistence"
+
 	"github.com/AlecAivazis/survey/v2/terminal"
 )
 

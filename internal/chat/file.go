@@ -16,6 +16,7 @@ import (
 	"duckduckgo-chat-cli/internal/config"
 	"duckduckgo-chat-cli/internal/media"
 	"duckduckgo-chat-cli/internal/ui"
+
 	"github.com/giraffesyo/pdf"
 )
 
