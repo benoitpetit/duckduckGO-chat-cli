@@ -246,9 +246,10 @@ func TestRelayCancellationStopsWaitingForExtension(t *testing.T) {
 func TestRelayWaitsLongerAfterExtensionConnects(t *testing.T) {
 	listener := newPipeListener()
 	client := pipeHTTPClient(listener)
+	extensionDone := make(chan error, 1)
 	relay := New(Options{
 		ListenAddress: "127.0.0.1:0",
-		WaitTimeout:   20 * time.Millisecond,
+		WaitTimeout:   500 * time.Millisecond,
 		Listen:        func(string, string) (net.Listener, error) { return listener, nil },
 		OpenBrowser: func(target string) error {
 			values, err := url.ParseQuery(strings.TrimPrefix(target[strings.Index(target, "#")+1:], "duckchat-relay="))
@@ -257,18 +258,36 @@ func TestRelayWaitsLongerAfterExtensionConnects(t *testing.T) {
 			}
 			go func() {
 				endpoint, token := values.Get("endpoint"), values.Get("token")
-				response := relayRequestWithClient(t, client, http.MethodGet, endpoint+"/v1/next", token, nil)
+				response, err := relayRequestWithClientError(client, http.MethodGet, endpoint+"/v1/next", token, nil)
+				if err != nil {
+					extensionDone <- err
+					return
+				}
 				var job relayJob
-				if response.StatusCode != http.StatusOK || json.NewDecoder(response.Body).Decode(&job) != nil {
-					t.Errorf("extension could not receive retry job: %d", response.StatusCode)
+				if response.StatusCode != http.StatusOK {
 					_ = response.Body.Close()
+					extensionDone <- errors.New("extension could not receive retry job")
+					return
+				}
+				if err := json.NewDecoder(response.Body).Decode(&job); err != nil {
+					_ = response.Body.Close()
+					extensionDone <- err
 					return
 				}
 				_ = response.Body.Close()
-				time.Sleep(60 * time.Millisecond)
-				response = relayJSONRequestWithClient(t, client, endpoint+"/v1/start", token, relayResponseStart{
+				time.Sleep(600 * time.Millisecond)
+				response, err = relayJSONRequestWithClientError(client, endpoint+"/v1/start", token, relayResponseStart{
 					ID: job.ID, Status: http.StatusOK, Header: make(http.Header),
 				})
+				if err != nil {
+					extensionDone <- err
+					return
+				}
+				if response.StatusCode != http.StatusNoContent {
+					extensionDone <- errors.New("extension start response was not accepted")
+				} else {
+					extensionDone <- nil
+				}
 				_ = response.Body.Close()
 			}()
 			return nil
@@ -278,6 +297,14 @@ func TestRelayWaitsLongerAfterExtensionConnects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	select {
+	case err := <-extensionDone:
+		if err != nil {
+			t.Fatalf("extension start request failed: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("extension start request did not finish")
+	}
 	_ = response.Body.Close()
 }
 
@@ -286,6 +313,7 @@ func TestRelayCancellationClosesStartedResponseStream(t *testing.T) {
 	defer cancel()
 	listener := newPipeListener()
 	client := pipeHTTPClient(listener)
+	extensionDone := make(chan error, 1)
 	relay := New(Options{
 		ListenAddress: "127.0.0.1:0",
 		WaitTimeout:   time.Second,
@@ -297,16 +325,30 @@ func TestRelayCancellationClosesStartedResponseStream(t *testing.T) {
 			}
 			endpoint, token := values.Get("endpoint"), values.Get("token")
 			go func() {
-				response := relayRequestWithClient(t, client, http.MethodGet, endpoint+"/v1/next", token, nil)
+				response, err := relayRequestWithClientError(client, http.MethodGet, endpoint+"/v1/next", token, nil)
+				if err != nil {
+					extensionDone <- err
+					return
+				}
 				var job relayJob
 				if response.StatusCode != http.StatusOK || json.NewDecoder(response.Body).Decode(&job) != nil {
 					_ = response.Body.Close()
+					extensionDone <- errors.New("extension could not receive retry job")
 					return
 				}
 				_ = response.Body.Close()
-				response = relayJSONRequestWithClient(t, client, endpoint+"/v1/start", token, relayResponseStart{
+				response, err = relayJSONRequestWithClientError(client, endpoint+"/v1/start", token, relayResponseStart{
 					ID: job.ID, Status: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}},
 				})
+				if err != nil {
+					extensionDone <- err
+					return
+				}
+				if response.StatusCode != http.StatusNoContent {
+					extensionDone <- errors.New("extension start response was not accepted")
+				} else {
+					extensionDone <- nil
+				}
 				_ = response.Body.Close()
 			}()
 			return nil
@@ -319,6 +361,14 @@ func TestRelayCancellationClosesStartedResponseStream(t *testing.T) {
 	}
 	if !opened {
 		t.Fatal("Relay.Do() opened = false, want true")
+	}
+	select {
+	case err := <-extensionDone:
+		if err != nil {
+			t.Fatalf("extension start request failed: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("extension start request did not finish")
 	}
 	cancel()
 	_, err = io.ReadAll(response.Body)
@@ -381,11 +431,19 @@ func relayJSONRequest(t *testing.T, target, token string, payload any) *http.Res
 
 func relayJSONRequestWithClient(t *testing.T, client *http.Client, target, token string, payload any) *http.Response {
 	t.Helper()
-	data, err := json.Marshal(payload)
+	response, err := relayJSONRequestWithClientError(client, target, token, payload)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return relayRequestWithClient(t, client, http.MethodPost, target, token, strings.NewReader(string(data)))
+	return response
+}
+
+func relayJSONRequestWithClientError(client *http.Client, target, token string, payload any) (*http.Response, error) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	return relayRequestWithClientError(client, http.MethodPost, target, token, strings.NewReader(string(data)))
 }
 
 func relayRequest(t *testing.T, method, target, token string, body io.Reader) *http.Response {
@@ -395,20 +453,24 @@ func relayRequest(t *testing.T, method, target, token string, body io.Reader) *h
 
 func relayRequestWithClient(t *testing.T, client *http.Client, method, target, token string, body io.Reader) *http.Response {
 	t.Helper()
-	request, err := http.NewRequest(method, target, body)
+	response, err := relayRequestWithClientError(client, method, target, token, body)
 	if err != nil {
 		t.Fatal(err)
+	}
+	return response
+}
+
+func relayRequestWithClientError(client *http.Client, method, target, token string, body io.Reader) (*http.Response, error) {
+	request, err := http.NewRequest(method, target, body)
+	if err != nil {
+		return nil, err
 	}
 	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("Origin", "chrome-extension://test-extension")
 	if method == http.MethodPost {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	response, err := client.Do(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return response
+	return client.Do(request)
 }
 
 type pipeListener struct {
